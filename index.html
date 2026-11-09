@@ -3979,11 +3979,12 @@
   </script>
 
   <!-- ========================================================
-       FIREBASE FIRESTORE REAL-TIME SYNC MODULE (FIXED)
+       FIREBASE FIRESTORE & STORAGE REAL-TIME SYNC MODULE
        ======================================================== -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyABnKY_-yqzz5r_SQXWKoetthHC5lgWFik",
@@ -3996,100 +3997,76 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const CHUNK_SIZE = 500000;
-    
-    // Memory Cache: risolve lo sfarfallio e la sparizione dei file quando onSnapshot aggiorna il database.
-    const mediaCache = {};
+    const storage = getStorage(app);
 
-    async function savePossiblyChunkedItem(colName, item) {
-      updateCloudBadge('syncing', 'Upload Dati & File...');
-      try {
-        const copy = { ...item };
-        const audioStr = copy.audioDataUrl || '';
-        
-        // Lo iniettiamo subito in cache così non "sparisce" mentre salva
-        if (audioStr) mediaCache[copy.id] = audioStr;
-
-        if (audioStr.length > CHUNK_SIZE) {
-          const totalChunks = Math.ceil(audioStr.length / CHUNK_SIZE);
-          const uploadPromises = []; // Eseguiamo gli upload in parallelo per azzerare i crash/ritardi
-          
-          for (let i = 0; i < totalChunks; i++) {
-            const slice = audioStr.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-            uploadPromises.push(setDoc(doc(db, "audio_chunks", `${copy.id}_chunk_${i}`), { parentId: copy.id, index: i, data: slice }));
-          }
-          await Promise.all(uploadPromises);
-          
-          copy.audioDataUrl = '';
-          copy.audioChunkCount = totalChunks;
-        } else {
-          copy.audioChunkCount = 0;
-        }
-
-        await setDoc(doc(db, colName, copy.id), copy);
-        state.cloudConnected = true;
-        updateCloudBadge('online', 'Cloud Sincronizzato');
-      } catch (err) {
-        console.warn(`Upload fallito (${colName}):`, err);
-        updateCloudBadge('offline', 'Locale (Errore Connessione)');
-      }
-    }
-
-    async function reassembleAudioChunksIfNeeded(docData) {
-      // Se lo abbiamo già scaricato in memoria, ricaricalo fulmineamente
-      if (mediaCache[docData.id]) {
-        return { ...docData, audioDataUrl: mediaCache[docData.id] };
-      }
-
-      if (!docData.audioChunkCount || docData.audioChunkCount <= 0) {
-        if (docData.audioDataUrl) mediaCache[docData.id] = docData.audioDataUrl;
-        return docData;
-      }
-
-      try {
-        let fullAudio = '';
-        const fetchPromises = [];
-        for (let i = 0; i < docData.audioChunkCount; i++) {
-          fetchPromises.push(getDoc(doc(db, "audio_chunks", `${docData.id}_chunk_${i}`)));
-        }
-        // Scarichiamo tutto in contemporanea
-        const snaps = await Promise.all(fetchPromises);
-        snaps.forEach(snap => { if (snap.exists()) fullAudio += snap.data().data || ''; });
-        
-        mediaCache[docData.id] = fullAudio;
-        return { ...docData, audioDataUrl: fullAudio };
-      } catch (e) { return docData; }
-    }
-
-    async function deleteItemAndChunks(colName, id) {
-      try {
-        await deleteDoc(doc(db, colName, id));
-        delete mediaCache[id];
-        const delPromises = [];
-        for (let i = 0; i < 6; i++) {
-          delPromises.push(deleteDoc(doc(db, "audio_chunks", `${id}_chunk_${i}`)).catch(() => {}));
-        }
-        await Promise.all(delPromises);
-      } catch (e) {}
+    // Trasforma i codici pesanti in velocissimi link Web
+    async function uploadToStorage(path, dataUrl) {
+      if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl; // Se è già un link o è vuoto lo ignora
+      const fileRef = ref(storage, path);
+      await uploadString(fileRef, dataUrl, 'data_url');
+      return await getDownloadURL(fileRef); // Restituisce un link web immediato
     }
 
     window.cloudBridge = {
-      saveMeme: (m) => savePossiblyChunkedItem("memes", m),
-      deleteMeme: (id) => deleteItemAndChunks("memes", id),
-      saveCharacter: async (c) => { try { await setDoc(doc(db, "characters", c.id), c); } catch (e) {} },
-      deleteCharacter: async (id) => { try { await deleteDoc(doc(db, "characters", id)); } catch (e) {} },
-      savePad: (p) => savePossiblyChunkedItem("pads", p),
-      deletePad: (id) => deleteItemAndChunks("pads", id),
-      saveCategories: async (cats) => { try { await setDoc(doc(db, "settings", "soundboard_config"), { categories: cats }); } catch (e) {} }
+      saveMeme: async (m) => {
+        updateCloudBadge('syncing', 'Salvataggio in corso...');
+        try {
+          const copy = { ...m };
+          // Carica file pesanti nello Storage e salva solo i link
+          copy.photo = await uploadToStorage(`memes/${copy.id}_img`, copy.photo);
+          copy.audioDataUrl = await uploadToStorage(`memes/${copy.id}_aud`, copy.audioDataUrl);
+          
+          await setDoc(doc(db, "memes", copy.id), copy);
+          state.cloudConnected = true; updateCloudBadge('online', 'Cloud Sincronizzato');
+        } catch(e) { console.error(e); updateCloudBadge('offline', 'Errore Salvataggio'); }
+      },
+      deleteMeme: async (id) => {
+        try {
+          await deleteDoc(doc(db, "memes", id));
+          deleteObject(ref(storage, `memes/${id}_img`)).catch(() => {});
+          deleteObject(ref(storage, `memes/${id}_aud`)).catch(() => {});
+        } catch (e) {}
+      },
+      saveCharacter: async (c) => {
+        try {
+          const copy = { ...c };
+          copy.photo = await uploadToStorage(`chars/${copy.id}_img`, copy.photo);
+          await setDoc(doc(db, "characters", copy.id), copy);
+        } catch (e) {}
+      },
+      deleteCharacter: async (id) => {
+        try { 
+          await deleteDoc(doc(db, "characters", id)); 
+          deleteObject(ref(storage, `chars/${id}_img`)).catch(() => {}); 
+        } catch (e) {}
+      },
+      savePad: async (p) => {
+        updateCloudBadge('syncing', 'Salvataggio suono...');
+        try {
+          const copy = { ...p };
+          copy.audioDataUrl = await uploadToStorage(`pads/${copy.id}_aud`, copy.audioDataUrl);
+          
+          await setDoc(doc(db, "pads", copy.id), copy);
+          state.cloudConnected = true; updateCloudBadge('online', 'Cloud Sincronizzato');
+        } catch(e) { console.error(e); updateCloudBadge('offline', 'Errore Salvataggio'); }
+      },
+      deletePad: async (id) => {
+        try { 
+          await deleteDoc(doc(db, "pads", id)); 
+          deleteObject(ref(storage, `pads/${id}_aud`)).catch(() => {}); 
+        } catch (e) {}
+      },
+      saveCategories: async (cats) => { 
+        try { await setDoc(doc(db, "settings", "soundboard_config"), { categories: cats }); } catch (e) {} 
+      }
     };
 
+    // I Listener ora scaricano solo il testo leggerissimo in un millisecondo
     let initialMemesSeeded = false;
-    onSnapshot(collection(db, "memes"), async (snapshot) => {
+    onSnapshot(collection(db, "memes"), (snapshot) => {
       state.cloudConnected = true; updateCloudBadge('online', 'Cloud Sincronizzato');
       if (snapshot.empty && !initialMemesSeeded) { initialMemesSeeded = true; for (const m of state.memes) window.cloudBridge.saveMeme(m); return; }
-      
-      const loaded = [];
-      for (const d of snapshot.docs) loaded.push(await reassembleAudioChunksIfNeeded(d.data()));
+      const loaded = snapshot.docs.map(d => d.data());
       if (loaded.length > 0) { state.memes = loaded; saveLocalBackup(); refreshUI(); if (state.memottiTab === 'cerca') renderCercaPills(); if (state.memottiTab === 'personaggi') renderPersonaggi(); }
     });
 
@@ -4101,10 +4078,9 @@
     });
 
     let initialPadsSeeded = false;
-    onSnapshot(collection(db, "pads"), async (snapshot) => {
+    onSnapshot(collection(db, "pads"), (snapshot) => {
       if (snapshot.empty && !initialPadsSeeded) { initialPadsSeeded = true; for (const p of state.pads) window.cloudBridge.savePad(p); return; }
-      const loaded = [];
-      for (const d of snapshot.docs) loaded.push(await reassembleAudioChunksIfNeeded(d.data()));
+      const loaded = snapshot.docs.map(d => d.data());
       if (loaded.length > 0) { state.pads = loaded.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); saveLocalBackup(); refreshUI(); }
     });
 
