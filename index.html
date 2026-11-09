@@ -3002,19 +3002,988 @@
   </script>
 
   <!-- ========================================================
-       FIREBASE FIRESTORE REAL-TIME SYNC MODULE
+       SYNCHRONOUS CORE ENGINE & LOCAL DB CACHE
+       ======================================================== -->
+  <script>
+    const PAD_COLORS = [
+      { name: 'Cyan Neon', bg: '#083344', border: '#06b6d4', text: '#67e8f9' },
+      { name: 'Rosso Andrea', bg: '#450a0a', border: '#ef4444', text: '#fca5a5' },
+      { name: 'Verde Tommaso', bg: '#052e16', border: '#22c55e', text: '#86efac' },
+      { name: 'Oro Meme', bg: '#451a03', border: '#f59e0b', text: '#fde68a' },
+      { name: 'Viola', bg: '#3b0764', border: '#a855f7', text: '#d8b4fe' },
+      { name: 'Rosa', bg: '#4c0519', border: '#f43f5e', text: '#fda4af' },
+      { name: 'Blu Notte', bg: '#172554', border: '#3b82f6', text: '#93c5fd' },
+      { name: 'Grigio Dark', bg: '#0f172a', border: '#475569', text: '#e2e8f0' }
+    ];
+
+    const PAD_ICONS = ['laugh', 'flame', 'bomb', 'zap', 'mic', 'music', 'alert-triangle', 'megaphone', 'radio', 'skull', 'party-popper', 'heart', 'volume-2', 'sparkles'];
+    const DEFAULT_CATEGORIES = ['TUTTI', 'RISATE', 'MEME', 'EFFETTI SONORI', 'VOCI', 'MUSICA', 'INTRO', 'RANDOM'];
+
+    let state = {
+      currentView: 'menu', memottiTab: 'raccolta', authorFilter: 'all', cercaFilter: null,
+      soundCategory: 'TUTTI', soundPlaybackMode: 'overlap', masterVolume: 0.95, cloudConnected: false,
+      memes: [], characters: [], pads: [], categories: [...DEFAULT_CATEGORIES]
+    };
+
+    /* Cloud Bridge Hooks */
+    window.cloudBridge = {
+      saveMeme: async () => {}, deleteMeme: async () => {}, saveCharacter: async () => {},
+      deleteCharacter: async () => {}, savePad: async () => {}, deletePad: async () => {}, saveCategories: async () => {}
+    };
+
+    /* ================= LOCAL CACHE WITH INDEXED-DB ================= 
+       Risolve il problema dei Crash aggirando il limite di 5MB del LocalStorage */
+    const localDB = new Promise((resolve, reject) => {
+      const request = indexedDB.open('memotti_robust_cache', 1);
+      request.onupgradeneeded = () => request.result.createObjectStore('data_cache');
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+
+    async function loadLocalBackup() {
+      try {
+        const db = await localDB;
+        const raw = await new Promise(res => {
+          const tx = db.transaction('data_cache', 'readonly');
+          const req = tx.objectStore('data_cache').get('memotti_v4_backup');
+          req.onsuccess = () => res(req.result);
+          req.onerror = () => res(null);
+        });
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed.memes) && parsed.memes.length) state.memes = parsed.memes;
+          if (Array.isArray(parsed.characters) && parsed.characters.length) state.characters = parsed.characters;
+          if (Array.isArray(parsed.pads) && parsed.pads.length) state.pads = parsed.pads;
+          if (Array.isArray(parsed.categories) && parsed.categories.length) state.categories = parsed.categories;
+        }
+      } catch (e) {
+        console.warn('Lettura cache locale fallita:', e);
+      }
+    }
+
+    async function saveLocalBackup() {
+      try {
+        // Nessun limite di dimensione: salva tutto, foto e audio compresi!
+        const payload = JSON.stringify({
+          memes: state.memes, characters: state.characters, pads: state.pads, categories: state.categories
+        });
+        const db = await localDB;
+        const tx = db.transaction('data_cache', 'readwrite');
+        tx.objectStore('data_cache').put(payload, 'memotti_v4_backup');
+      } catch (e) {}
+    }
+
+    function updateCloudBadge(status, label) {
+      const dot = document.getElementById('cloud-status-dot');
+      const txt = document.getElementById('cloud-status-text');
+      if (!dot || !txt) return;
+      txt.textContent = label;
+      if (status === 'online') dot.className = 'w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_#22c55e]';
+      else if (status === 'syncing') dot.className = 'w-2 h-2 rounded-full bg-cyan-400 animate-ping';
+      else dot.className = 'w-2 h-2 rounded-full bg-amber-400';
+    }
+
+    function showCloudInfoToast() {
+      if (state.cloudConnected) showToast("Cloud Firebase ('memotti') attivo e sincronizzato in tempo reale!");
+      else showToast("Modalità locale attiva. Assicurati che Firebase sia configurato.", true);
+    }
+
+    /* ================= IMAGE COMPRESSION ================= */
+    function compressImageFile(file, maxWidth = 900, quality = 0.72) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            let w = img.width, h = img.height;
+            if (w > maxWidth) { h = Math.round((h * maxWidth) / w); w = maxWidth; }
+            const canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.onerror = reject; img.src = e.target.result;
+        };
+        reader.onerror = reject; reader.readAsDataURL(file);
+      });
+    }
+
+    function blobToDataURL(blob) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = reject; r.readAsDataURL(blob);
+      });
+    }
+    async function dataURLToArrayBuffer(dataUrl) {
+      return await (await fetch(dataUrl)).arrayBuffer();
+    }
+
+    /* ================= NAVIGATION ================= */
+    function navigate(viewName) {
+      state.currentView = viewName;
+      document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
+      document.getElementById('view-' + viewName)?.classList.remove('hidden');
+
+      ['menu', 'memotti', 'soundboard'].forEach(v => {
+        const btn = document.getElementById('nav-btn-' + v);
+        if (btn) btn.className = v === viewName
+          ? 'px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-800 text-white shadow-sm border border-slate-700 flex items-center gap-1.5 transition-all'
+          : 'px-4 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-400 hover:text-white flex items-center gap-1.5 transition-all';
+      });
+      refreshUI();
+    }
+
+    function switchMemottiTab(tab) {
+      state.memottiTab = tab;
+      document.querySelectorAll('.mem-pane').forEach(el => el.classList.add('hidden'));
+      document.getElementById('mem-pane-' + tab)?.classList.remove('hidden');
+
+      ['raccolta', 'random', 'cerca', 'personaggi'].forEach(t => {
+        const btn = document.getElementById('memotti-tab-' + t);
+        if (btn) btn.className = t === tab
+          ? 'px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 transition-all'
+          : 'px-4 py-2.5 rounded-xl text-xs sm:text-sm font-medium text-slate-400 hover:text-white bg-slate-900 border border-slate-800 flex items-center gap-1.5 transition-all';
+      });
+      if (tab === 'random') showRandomMeme();
+      if (tab === 'cerca') renderCercaPills();
+      if (tab === 'personaggi') renderPersonaggi();
+    }
+
+    /* ================= MEMOTTI LOGIC ================= */
+    function setMemeAuthorFilter(author) {
+      state.authorFilter = author;
+      ['all', 'andrea', 'tommaso'].forEach(a => {
+        const btn = document.getElementById('author-filter-' + a);
+        if (btn) {
+          if (a === author.toLowerCase()) btn.classList.add('bg-slate-800', 'ring-1', 'ring-slate-600');
+          else btn.classList.remove('bg-slate-800', 'ring-1', 'ring-slate-600');
+        }
+      });
+      renderMemes();
+    }
+
+    function isGenericMeme(m) { return !m.luogo && !m.personaggio && !m.data; }
+
+    function renderMemes() {
+      const container = document.getElementById('memes-grid');
+      const emptyEl = document.getElementById('memes-empty');
+      if (!container) return;
+
+      const query = (document.getElementById('meme-search-input')?.value || '').toLowerCase();
+      const catFilter = document.getElementById('meme-category-select')?.value || 'ALL';
+
+      let list = state.memes.slice().sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      if (state.authorFilter !== 'all') list = list.filter(m => m.author === state.authorFilter);
+      if (catFilter === 'GENERICA') list = list.filter(m => isGenericMeme(m));
+      else if (catFilter === 'CON_FOTO') list = list.filter(m => !!m.photo);
+      else if (catFilter === 'CON_AUDIO') list = list.filter(m => !!m.audioDataUrl);
+
+      if (query.trim()) {
+        list = list.filter(m => (m.quote?.toLowerCase().includes(query) || m.luogo?.toLowerCase().includes(query) || m.personaggio?.toLowerCase().includes(query) || m.data?.toLowerCase().includes(query)));
+      }
+
+      container.innerHTML = '';
+      if (list.length === 0) {
+        emptyEl?.classList.remove('hidden'); emptyEl?.classList.add('flex');
+        return;
+      }
+      emptyEl?.classList.add('hidden'); emptyEl?.classList.remove('flex');
+      list.forEach(m => container.appendChild(createMemeCardElement(m)));
+      lucide.createIcons();
+    }
+
+    function createMemeCardElement(m) {
+      const div = document.createElement('div');
+      div.className = 'bg-slate-900/95 border border-slate-800 hover:border-slate-700 rounded-3xl p-5 shadow-lg flex flex-col justify-between transition-all hover:-translate-y-0.5';
+
+      const authorBadge = m.author === 'Andrea' ? `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-red-500/15 text-[#ef4444] border border-red-500/30">ANDREA</span>`
+        : (m.author === 'Tommaso' ? `<span class="px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-500/15 text-[#22c55e] border border-emerald-500/30">TOMMASO</span>`
+        : `<span class="px-2.5 py-0.5 rounded-full text-[10px] font-semibold text-slate-400 bg-slate-800">Entrambi / Generico</span>`);
+
+      const photoHtml = m.photo ? `<div class="my-3 rounded-2xl overflow-hidden max-h-56 border border-slate-800 bg-black flex items-center justify-center"><img src="${m.photo}" class="w-full h-full object-cover cursor-pointer" onclick="window.open('${m.photo}', '_blank')"></div>` : '';
+      const audioHtml = m.audioDataUrl ? `<div class="mt-3 p-2 bg-slate-950 rounded-2xl border border-slate-800"><audio controls src="${m.audioDataUrl}" class="h-8 w-full"></audio></div>` : '';
+
+      let pillsHtml = '';
+      if (m.luogo) pillsHtml += `<button onclick="jumpToCercaTag('luogo', '${escapeJsStr(m.luogo)}')" class="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-lg bg-cyan-950/70 text-cyan-300 border border-cyan-800/50 hover:bg-cyan-900">📍 ${escapeHtml(m.luogo)}</button>`;
+      if (m.personaggio) pillsHtml += `<button onclick="jumpToCercaTag('personaggio', '${escapeJsStr(m.personaggio)}')" class="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-lg bg-emerald-950/70 text-emerald-300 border border-emerald-800/50 hover:bg-emerald-900">🎭 ${escapeHtml(m.personaggio)}</button>`;
+      if (m.data) pillsHtml += `<button onclick="jumpToCercaTag('data', '${escapeJsStr(m.data)}')" class="inline-flex items-center gap-1 text-[11px] px-2.5 py-0.5 rounded-lg bg-amber-950/70 text-amber-300 border border-amber-800/50 hover:bg-amber-900">📅 ${escapeHtml(m.data)}</button>`;
+      if (isGenericMeme(m)) pillsHtml = `<span class="text-[11px] px-2.5 py-0.5 rounded-lg bg-slate-800/80 text-slate-400">📦 Sezione Generica</span>`;
+
+      div.innerHTML = `
+        <div>
+          <div class="flex items-center justify-between gap-2 mb-3">
+            ${authorBadge}
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="openEditMemeModal('${m.id}')" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-amber-500/20 text-slate-200 hover:text-amber-300 border border-slate-700 text-xs font-bold flex items-center gap-1 transition-all"><i data-lucide="pencil" class="w-3 h-3"></i> Modifica</button>
+              <button type="button" onclick="deleteMeme('${m.id}')" class="text-slate-500 hover:text-rose-400 p-1.5 rounded-lg" title="Elimina"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
+            </div>
+          </div>
+          <p class="text-base sm:text-lg font-extrabold text-white leading-snug break-words">“${escapeHtml(m.quote)}”</p>
+          ${photoHtml} ${audioHtml}
+        </div>
+        <div class="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap gap-1.5 items-center">${pillsHtml}</div>
+      `;
+      return div;
+    }
+
+    function jumpToCercaTag(field, val) { switchMemottiTab('cerca'); filterCercaBy(field, val); }
+
+    function showRandomMeme() {
+      const container = document.getElementById('random-meme-card-container');
+      if (!container) return;
+      if (state.memes.length === 0) { container.innerHTML = `<p class="text-slate-500">Nessun memotto presente nella raccolta.</p>`; return; }
+      const m = state.memes[Math.floor(Math.random() * state.memes.length)];
+      container.innerHTML = '';
+      const card = createMemeCardElement(m);
+      card.classList.add('text-left', 'border-2', 'border-amber-500/40');
+      container.appendChild(card);
+      lucide.createIcons();
+    }
+
+    function renderCercaPills() {
+      const luoghi = new Set(), personaggi = new Set(), date = new Set();
+      state.memes.forEach(m => {
+        if (m.luogo) luoghi.add(m.luogo.trim());
+        if (m.personaggio) personaggi.add(m.personaggio.trim());
+        if (m.data) date.add(m.data.trim());
+      });
+
+      const fillBox = (id, countId, set, field, colorClass) => {
+        const el = document.getElementById(id), cEl = document.getElementById(countId);
+        if (cEl) cEl.textContent = set.size;
+        if (!el) return;
+        el.innerHTML = '';
+        if (set.size === 0) { el.innerHTML = `<span class="text-xs text-slate-600 italic">Nessuna parola chiave registrata</span>`; return; }
+        set.forEach(val => {
+          const btn = document.createElement('button');
+          btn.className = `px-3 py-1.5 text-xs font-bold rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-slate-200 transition-all ${colorClass}`;
+          btn.textContent = val; btn.onclick = () => filterCercaBy(field, val);
+          el.appendChild(btn);
+        });
+      };
+      fillBox('pills-luoghi', 'count-pills-luoghi', luoghi, 'luogo', 'hover:border-cyan-400');
+      fillBox('pills-personaggi', 'count-pills-personaggi', personaggi, 'personaggio', 'hover:border-emerald-400');
+      fillBox('pills-date', 'count-pills-date', date, 'data', 'hover:border-amber-400');
+
+      if (state.cercaFilter) filterCercaBy(state.cercaFilter.field, state.cercaFilter.value);
+    }
+
+    function filterCercaBy(field, value) {
+      state.cercaFilter = { field, value };
+      const header = document.getElementById('cerca-filtered-header');
+      const tag = document.getElementById('cerca-active-tag');
+      const grid = document.getElementById('cerca-filtered-grid');
+
+      header?.classList.remove('hidden'); header?.classList.add('flex');
+      if (tag) tag.textContent = `${field.toUpperCase()}: ${value}`;
+
+      let matches = field === 'generica' ? state.memes.filter(m => isGenericMeme(m)) : state.memes.filter(m => m[field] && m[field].trim().toLowerCase() === value.trim().toLowerCase());
+      if (grid) {
+        grid.innerHTML = '';
+        if (matches.length === 0) { grid.innerHTML = `<p class="text-slate-500 text-xs col-span-full">Nessun memotto trovato per questa selezione.</p>`; return; }
+        matches.forEach(m => grid.appendChild(createMemeCardElement(m)));
+        lucide.createIcons();
+      }
+    }
+
+    function clearCercaFilter() {
+      state.cercaFilter = null;
+      document.getElementById('cerca-filtered-header')?.classList.add('hidden');
+      if (document.getElementById('cerca-filtered-grid')) document.getElementById('cerca-filtered-grid').innerHTML = '';
+    }
+
+    /* ================= PERSONAGGI LOGIC ================= */
+    function syncCharactersFromMemes() {
+      state.memes.forEach(m => {
+        if (m.personaggio && m.personaggio.trim()) {
+          const pName = m.personaggio.trim();
+          if (!state.characters.find(c => c.name.trim().toLowerCase() === pName.toLowerCase())) {
+            const newChar = { id: 'char-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), name: pName, photo: '' };
+            state.characters.push(newChar); window.cloudBridge.saveCharacter(newChar);
+          }
+        }
+      });
+    }
+
+    function renderPersonaggi() {
+      syncCharactersFromMemes();
+      const grid = document.getElementById('personaggi-grid');
+      if (!grid) return;
+      grid.innerHTML = '';
+
+      const counts = {};
+      state.memes.forEach(m => { if (m.personaggio) counts[m.personaggio.trim().toLowerCase()] = (counts[m.personaggio.trim().toLowerCase()] || 0) + 1; });
+
+      state.characters.forEach(c => {
+        const count = counts[c.name.trim().toLowerCase()] || 0;
+        const card = document.createElement('div');
+        card.className = 'group bg-slate-900 border border-slate-800 hover:border-emerald-500/60 rounded-3xl p-4 text-center cursor-pointer transition-all hover:scale-[1.02] flex flex-col justify-between shadow-lg';
+        card.onclick = () => { switchMemottiTab('cerca'); filterCercaBy('personaggio', c.name); };
+        
+        const avatar = c.photo ? `<div class="w-24 h-24 mx-auto mb-3 rounded-full overflow-hidden border-2 border-emerald-400 shadow-md"><img src="${c.photo}" alt="${escapeHtml(c.name)}" class="w-full h-full object-cover"></div>`
+          : `<div class="w-24 h-24 rounded-full bg-slate-800 border-2 border-dashed border-slate-600 mx-auto mb-3 flex flex-col items-center justify-center text-emerald-400 group-hover:border-emerald-400"><i data-lucide="user" class="w-8 h-8"></i><span class="text-[10px] text-slate-400 font-bold mt-0.5">+ Foto</span></div>`;
+        card.innerHTML = `
+          <div>${avatar}<h4 class="font-black text-sm text-white group-hover:text-emerald-300 truncate">${escapeHtml(c.name)}</h4>
+          <span class="text-xs text-slate-400 font-semibold block mb-3">${count} memott${count === 1 ? 'o' : 'i'}</span></div>
+          <button type="button" onclick="event.stopPropagation(); openEditPersonaggioModal('${c.id}')" class="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-emerald-500/20 text-slate-200 hover:text-emerald-300 border border-slate-700 text-xs font-bold flex items-center justify-center gap-1.5"><i data-lucide="camera" class="w-3.5 h-3.5"></i> Modifica / Foto</button>
+        `;
+        grid.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    /* ================= MODAL MEMOTTO HANDLERS ================= */
+    let currentMemePhotoDataUrl = '', currentMemeAudioDataUrl = '', mediaRecorder = null, audioChunks = [], recTimerInterval = null;
+
+    function populateMemeDatalists() {
+      const dlLuoghi = document.getElementById('dl-luoghi'), dlPers = document.getElementById('dl-personaggi'), dlDate = document.getElementById('dl-date');
+      if (dlLuoghi) { dlLuoghi.innerHTML = ''; new Set(state.memes.map(m => m.luogo).filter(Boolean)).forEach(v => dlLuoghi.appendChild(new Option(v, v))); }
+      if (dlPers) { dlPers.innerHTML = ''; new Set(state.characters.map(c => c.name).concat(state.memes.map(m => m.personaggio).filter(Boolean))).forEach(v => dlPers.appendChild(new Option(v, v))); }
+      if (dlDate) { dlDate.innerHTML = ''; new Set(state.memes.map(m => m.data).filter(Boolean)).forEach(v => dlDate.appendChild(new Option(v, v))); }
+    }
+
+    function openAddMemeModal() {
+      populateMemeDatalists(); clearMemePhoto(); clearMemeAudio();
+      document.getElementById('form-add-meme')?.reset(); document.getElementById('meme-edit-id').value = '';
+      document.getElementById('modal-meme-title').innerHTML = `<i data-lucide="sparkles" class="w-5 h-5 text-amber-400"></i> Inserisci Nuovo Memotto`;
+      document.getElementById('btn-submit-meme').textContent = 'SALVA MEMOTTO';
+      openModal('modal-add-meme'); lucide.createIcons();
+    }
+
+    function openEditMemeModal(memeId) {
+      const meme = state.memes.find(m => m.id === memeId); if (!meme) return;
+      populateMemeDatalists(); clearMemePhoto(); clearMemeAudio(); document.getElementById('form-add-meme')?.reset();
+      document.getElementById('meme-edit-id').value = meme.id;
+      document.getElementById('modal-meme-title').innerHTML = `<i data-lucide="pencil" class="w-5 h-5 text-amber-400"></i> Modifica Memotto`;
+      document.getElementById('btn-submit-meme').textContent = 'AGGIORNA MEMOTTO';
+      document.getElementById('meme-quote').value = meme.quote || ''; document.getElementById('meme-luogo').value = meme.luogo || '';
+      document.getElementById('meme-personaggio').value = meme.personaggio || ''; document.getElementById('meme-data').value = meme.data || '';
+      document.querySelectorAll('input[name="meme-author"]').forEach(r => { r.checked = (r.value === (meme.author || '')); });
+
+      if (meme.photo) { currentMemePhotoDataUrl = meme.photo; document.getElementById('meme-photo-preview').src = currentMemePhotoDataUrl; document.getElementById('meme-photo-preview-wrap')?.classList.remove('hidden'); }
+      if (meme.audioDataUrl) { currentMemeAudioDataUrl = meme.audioDataUrl; document.getElementById('meme-audio-preview').src = currentMemeAudioDataUrl; document.getElementById('meme-audio-preview-wrap')?.classList.remove('hidden'); }
+      openModal('modal-add-meme'); lucide.createIcons();
+    }
+
+    async function previewMemePhoto(input) {
+      if (input.files && input.files[0]) {
+        try {
+          currentMemePhotoDataUrl = await compressImageFile(input.files[0], 900, 0.72);
+          document.getElementById('meme-photo-preview').src = currentMemePhotoDataUrl;
+          document.getElementById('meme-photo-preview-wrap')?.classList.remove('hidden');
+        } catch (e) { showToast("Errore nel caricamento dell'immagine", true); }
+      }
+    }
+    function clearMemePhoto() { currentMemePhotoDataUrl = ''; if(document.getElementById('meme-photo-input')) document.getElementById('meme-photo-input').value = ''; document.getElementById('meme-photo-preview-wrap')?.classList.add('hidden'); }
+
+    async function toggleMemeAudioRecording() {
+      const btn = document.getElementById('meme-mic-btn'), text = document.getElementById('meme-mic-text'), timer = document.getElementById('meme-rec-timer');
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop(); btn.className = 'px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-xs font-bold flex items-center gap-1.5 text-rose-300';
+        text.textContent = 'Registra Audio'; timer.classList.add('hidden'); clearInterval(recTimerInterval); return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = []; mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
+        mediaRecorder.onstop = async () => {
+          currentMemeAudioDataUrl = await blobToDataURL(new Blob(audioChunks, { type: 'audio/webm' }));
+          document.getElementById('meme-audio-preview').src = currentMemeAudioDataUrl; document.getElementById('meme-audio-preview-wrap')?.classList.remove('hidden');
+          stream.getTracks().forEach(t => t.stop());
+        };
+        mediaRecorder.start(); btn.className = 'px-3.5 py-2 rounded-xl bg-rose-600 text-white text-xs font-black flex items-center gap-1.5 animate-pulse';
+        text.textContent = 'STOP Registrazione'; timer.classList.remove('hidden');
+        let seconds = 0; timer.textContent = '00:00';
+        recTimerInterval = setInterval(() => { seconds++; timer.textContent = `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`; }, 1000);
+      } catch (err) { showToast("Permesso microfono negato.", true); }
+    }
+
+    async function handleMemeAudioFile(input) {
+      if (!input.files || !input.files[0]) return;
+      const file = input.files[0]; showToast("Elaborazione audio in corso...");
+      try {
+        const audioBuf = await extractAudioBufferFromFile(file);
+        currentMemeAudioDataUrl = await blobToDataURL(audioBufferToWavBlob(audioBuf, 16000));
+        document.getElementById('meme-audio-preview').src = currentMemeAudioDataUrl; document.getElementById('meme-audio-preview-wrap')?.classList.remove('hidden');
+        showToast("Audio allegato con successo!");
+      } catch (e) {
+        currentMemeAudioDataUrl = await blobToDataURL(file);
+        document.getElementById('meme-audio-preview').src = currentMemeAudioDataUrl; document.getElementById('meme-audio-preview-wrap')?.classList.remove('hidden');
+      }
+    }
+    function clearMemeAudio() { currentMemeAudioDataUrl = ''; if(document.getElementById('meme-audio-file')) document.getElementById('meme-audio-file').value = ''; document.getElementById('meme-audio-preview').src = ''; document.getElementById('meme-audio-preview-wrap')?.classList.add('hidden'); }
+
+    async function handleSaveMeme(e) {
+      e.preventDefault();
+      const editId = document.getElementById('meme-edit-id').value, quote = document.getElementById('meme-quote').value.trim();
+      const author = document.querySelector('input[name="meme-author"]:checked')?.value || '';
+      const luogo = document.getElementById('meme-luogo').value.trim(), personaggio = document.getElementById('meme-personaggio').value.trim(), data = document.getElementById('meme-data').value.trim();
+
+      if (personaggio && !state.characters.find(c => c.name.trim().toLowerCase() === personaggio.toLowerCase())) {
+        const newChar = { id: 'char-' + Date.now(), name: personaggio, photo: '' };
+        state.characters.push(newChar); window.cloudBridge.saveCharacter(newChar);
+      }
+      let targetMeme;
+      if (editId) {
+        const idx = state.memes.findIndex(m => m.id === editId);
+        if (idx !== -1) {
+          targetMeme = { ...state.memes[idx], quote, author, luogo, personaggio, data, photo: currentMemePhotoDataUrl, audioDataUrl: currentMemeAudioDataUrl };
+          state.memes[idx] = targetMeme;
+        }
+      } else {
+        targetMeme = { id: 'meme-' + Date.now(), quote, author, luogo, personaggio, data, photo: currentMemePhotoDataUrl, audioDataUrl: currentMemeAudioDataUrl, timestamp: Date.now() };
+        state.memes.unshift(targetMeme);
+      }
+      saveLocalBackup(); closeModal('modal-add-meme'); refreshUI();
+      if (state.memottiTab === 'random') showRandomMeme();
+      if (state.memottiTab === 'cerca') renderCercaPills();
+      if (targetMeme) await window.cloudBridge.saveMeme(targetMeme);
+      showToast(editId ? "Memotto aggiornato!" : "Nuovo memotto salvato!");
+    }
+
+    async function deleteMeme(id) {
+      state.memes = state.memes.filter(m => m.id !== id);
+      saveLocalBackup(); refreshUI();
+      if (state.memottiTab === 'cerca') renderCercaPills();
+      await window.cloudBridge.deleteMeme(id);
+      showToast("Memotto eliminato");
+    }
+
+    /* ================= PERSONAGGIO MODAL HANDLERS ================= */
+    let currentCharPhotoDataUrl = '';
+    function openAddPersonaggioModal() {
+      currentCharPhotoDataUrl = ''; document.getElementById('char-edit-id').value = ''; document.getElementById('char-name-input').value = ''; document.getElementById('char-photo-input').value = '';
+      document.getElementById('char-photo-preview-wrap')?.classList.add('hidden'); document.getElementById('btn-delete-char')?.classList.add('hidden');
+      document.getElementById('modal-char-title').innerHTML = `<i data-lucide="user-plus" class="w-5 h-5 text-emerald-400"></i> Nuovo Personaggio`;
+      openModal('modal-personaggio'); lucide.createIcons();
+    }
+    function openEditPersonaggioModal(charId) {
+      const c = state.characters.find(x => x.id === charId); if (!c) return;
+      document.getElementById('char-edit-id').value = c.id; document.getElementById('char-name-input').value = c.name || ''; document.getElementById('char-photo-input').value = '';
+      document.getElementById('modal-char-title').innerHTML = `<i data-lucide="camera" class="w-5 h-5 text-emerald-400"></i> Modifica Personaggio`;
+      document.getElementById('btn-delete-char')?.classList.remove('hidden');
+      currentCharPhotoDataUrl = c.photo || '';
+      if (currentCharPhotoDataUrl) { document.getElementById('char-photo-preview').src = currentCharPhotoDataUrl; document.getElementById('char-photo-preview-wrap')?.classList.remove('hidden'); }
+      else document.getElementById('char-photo-preview-wrap')?.classList.add('hidden');
+      openModal('modal-personaggio'); lucide.createIcons();
+    }
+    async function previewCharPhoto(input) {
+      if (input.files && input.files[0]) {
+        currentCharPhotoDataUrl = await compressImageFile(input.files[0], 600, 0.75);
+        document.getElementById('char-photo-preview').src = currentCharPhotoDataUrl; document.getElementById('char-photo-preview-wrap')?.classList.remove('hidden');
+      }
+    }
+    function clearCharPhoto() { currentCharPhotoDataUrl = ''; document.getElementById('char-photo-input').value = ''; document.getElementById('char-photo-preview-wrap')?.classList.add('hidden'); }
+    async function handleSavePersonaggio(e) {
+      e.preventDefault();
+      const editId = document.getElementById('char-edit-id').value, newName = document.getElementById('char-name-input').value.trim();
+      if (!newName) return;
+      let savedChar;
+      if (editId) {
+        const idx = state.characters.findIndex(c => c.id === editId);
+        if (idx !== -1) {
+          const oldName = state.characters[idx].name; state.characters[idx].name = newName; state.characters[idx].photo = currentCharPhotoDataUrl; savedChar = state.characters[idx];
+          if (oldName && oldName.trim().toLowerCase() !== newName.toLowerCase()) {
+            for (const m of state.memes) {
+              if (m.personaggio && m.personaggio.trim().toLowerCase() === oldName.trim().toLowerCase()) { m.personaggio = newName; window.cloudBridge.saveMeme(m); }
+            }
+          }
+        }
+      } else {
+        savedChar = { id: 'char-' + Date.now(), name: newName, photo: currentCharPhotoDataUrl }; state.characters.push(savedChar);
+      }
+      saveLocalBackup(); closeModal('modal-personaggio'); renderPersonaggi(); refreshUI();
+      if (savedChar) await window.cloudBridge.saveCharacter(savedChar);
+      showToast("Personaggio salvato!");
+    }
+    async function deleteCurrentPersonaggio() {
+      const editId = document.getElementById('char-edit-id').value; if (!editId) return;
+      state.characters = state.characters.filter(c => c.id !== editId);
+      saveLocalBackup(); closeModal('modal-personaggio'); renderPersonaggi();
+      await window.cloudBridge.deleteCharacter(editId); showToast("Personaggio eliminato");
+    }
+
+    /* ================= SOUNDBOARD ENGINE ================= */
+    let audioCtx = null;
+    function getAudioContext() {
+      if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      return audioCtx;
+    }
+    let activeSoundInstances = []; let decodedPadBufferCache = {};
+    async function playPadSound(padId) {
+      const pad = state.pads.find(p => p.id === padId); if (!pad) return;
+      const ctx = getAudioContext();
+      const existingIdx = activeSoundInstances.findIndex(item => item.padId === padId);
+      if (existingIdx !== -1) {
+        try { activeSoundInstances[existingIdx].source.stop(); } catch (e) {}
+        activeSoundInstances.splice(existingIdx, 1); updatePadVisualState(padId, false); return;
+      }
+      if (state.soundPlaybackMode === 'exclusive') stopAllSounds();
+
+      try {
+        let audioBuffer = decodedPadBufferCache[pad.id];
+        if (!audioBuffer) {
+          if (pad.audioDataUrl) {
+            const arrBuf = await dataURLToArrayBuffer(pad.audioDataUrl);
+            audioBuffer = await ctx.decodeAudioData(arrBuf.slice(0)); decodedPadBufferCache[pad.id] = audioBuffer;
+          } else if (pad.synthType) {
+            audioBuffer = await generateSynthBuffer(pad.synthType, ctx); decodedPadBufferCache[pad.id] = audioBuffer;
+          }
+        }
+        if (!audioBuffer) { openPadConfig(pad.id); showToast("Questo tasto è vuoto: carica un suono!", true); return; }
+
+        const source = ctx.createBufferSource(); source.buffer = audioBuffer; source.loop = !!pad.loop;
+        const gainNode = ctx.createGain(); gainNode.gain.setValueAtTime((pad.volume ?? 1.0) * state.masterVolume, ctx.currentTime);
+        source.connect(gainNode); gainNode.connect(ctx.destination); source.start(0); updatePadVisualState(padId, true);
+        const instance = { padId, source, gainNode }; activeSoundInstances.push(instance);
+        source.onended = () => {
+          const idx = activeSoundInstances.indexOf(instance);
+          if (idx !== -1) activeSoundInstances.splice(idx, 1); updatePadVisualState(padId, false);
+        };
+      } catch (err) { console.error(err); showToast("Errore riproduzione suono", true); }
+    }
+    function stopAllSounds() { activeSoundInstances.forEach(inst => { try { inst.source.stop(); } catch (e) {} updatePadVisualState(inst.padId, false); }); activeSoundInstances = []; }
+    function updatePadVisualState(padId, isPlaying) {
+      const el = document.getElementById('pad-btn-' + padId), badge = document.getElementById('pad-status-' + padId);
+      if (el) isPlaying ? el.classList.add('sound-playing') : el.classList.remove('sound-playing');
+      if (badge) badge.textContent = isPlaying ? '⏹ STOP' : '▶ PLAY';
+    }
+    function setMasterVolume(val) {
+      state.masterVolume = parseFloat(val); document.getElementById('master-vol-label').textContent = Math.round(state.masterVolume * 100) + '%';
+      if (audioCtx) activeSoundInstances.forEach(inst => { const pad = state.pads.find(p => p.id === inst.padId); inst.gainNode.gain.setValueAtTime((pad?.volume ?? 1.0) * state.masterVolume, audioCtx.currentTime); });
+    }
+    function setPlaybackMode(mode) {
+      state.soundPlaybackMode = mode;
+      document.getElementById('mode-poly').className = mode === 'overlap' ? 'px-3 py-1.5 rounded-lg font-bold text-xs bg-cyan-500 text-slate-950 shadow' : 'px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-white';
+      document.getElementById('mode-mono').className = mode === 'overlap' ? 'px-3 py-1.5 rounded-lg font-medium text-xs text-slate-400 hover:text-white' : 'px-3 py-1.5 rounded-lg font-bold text-xs bg-cyan-500 text-slate-950 shadow';
+    }
+
+    async function generateSynthBuffer(type, ctx) {
+      const sampleRate = ctx.sampleRate || 44100, duration = type === 'applause' ? 1.4 : (type === 'fanfare' ? 1.2 : 0.8);
+      const offlineCtx = new OfflineAudioContext(1, sampleRate * duration, sampleRate);
+      if (type === 'boom') {
+        const osc = offlineCtx.createOscillator(), gain = offlineCtx.createGain();
+        osc.frequency.setValueAtTime(150, 0); osc.frequency.exponentialRampToValueAtTime(28, duration);
+        gain.gain.setValueAtTime(1, 0); gain.gain.exponentialRampToValueAtTime(0.001, duration);
+        osc.connect(gain); gain.connect(offlineCtx.destination); osc.start(0);
+      } else if (type === 'laugh') {
+        const osc = offlineCtx.createOscillator(), gain = offlineCtx.createGain(); osc.type = 'sawtooth';
+        for (let t = 0; t < duration; t += 0.12) { osc.frequency.setValueAtTime(460, t); osc.frequency.exponentialRampToValueAtTime(280, t + 0.11); }
+        gain.gain.setValueAtTime(0.6, 0); gain.gain.exponentialRampToValueAtTime(0.01, duration);
+        osc.connect(gain); gain.connect(offlineCtx.destination); osc.start(0);
+      } else if (type === 'buzzer') {
+        const osc = offlineCtx.createOscillator(), gain = offlineCtx.createGain(); osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(92, 0); gain.gain.setValueAtTime(0.75, 0); gain.gain.exponentialRampToValueAtTime(0.01, duration);
+        osc.connect(gain); gain.connect(offlineCtx.destination); osc.start(0);
+      } else if (type === 'applause') {
+        const buf = offlineCtx.createBuffer(1, sampleRate * duration, sampleRate), data = buf.getChannelData(0);
+        for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+        const noise = offlineCtx.createBufferSource(), filter = offlineCtx.createBiquadFilter(), gain = offlineCtx.createGain();
+        noise.buffer = buf; filter.type = 'bandpass'; filter.frequency.value = 1100;
+        gain.gain.setValueAtTime(0.7, 0); gain.gain.exponentialRampToValueAtTime(0.01, duration);
+        noise.connect(filter); filter.connect(gain); gain.connect(offlineCtx.destination); noise.start(0);
+      } else {
+        [261.63, 329.63, 392.00, 523.25].forEach((freq, idx) => {
+          const osc = offlineCtx.createOscillator(), gain = offlineCtx.createGain(), st = idx * 0.22;
+          osc.frequency.setValueAtTime(freq, st); gain.gain.setValueAtTime(0.45, st); gain.gain.exponentialRampToValueAtTime(0.01, st + 0.35);
+          osc.connect(gain); gain.connect(offlineCtx.destination); osc.start(st); osc.stop(st + 0.35);
+        });
+      }
+      return await offlineCtx.startRendering();
+    }
+
+    /* ================= SOUNDBOARD CATEGORIES & GRID ================= */
+    function renderSoundboardCategories() {
+      const container = document.getElementById('soundboard-category-tabs'); if (!container) return;
+      container.innerHTML = '';
+      state.categories.forEach(cat => {
+        const btn = document.createElement('button');
+        btn.className = `px-3.5 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap ${state.soundCategory === cat ? 'bg-cyan-400 text-slate-950 shadow-md shadow-cyan-400/20' : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'}`;
+        btn.textContent = cat; btn.onclick = () => { state.soundCategory = cat; renderSoundboardCategories(); renderSoundboard(); };
+        container.appendChild(btn);
+      });
+      const isCustom = state.soundCategory !== 'TUTTI';
+      document.getElementById('btn-rename-cat')?.classList.toggle('hidden', !isCustom);
+      document.getElementById('btn-delete-cat')?.classList.toggle('hidden', !isCustom);
+    }
+
+    function openCategoryManagerModal(mode) {
+      document.getElementById('cat-modal-mode').value = mode;
+      document.getElementById('modal-cat-title').textContent = mode === 'rename' ? `Rinomina Categoria "${state.soundCategory}"` : 'Nuova Categoria Soundboard';
+      document.getElementById('cat-modal-input').value = mode === 'rename' ? state.soundCategory : '';
+      openModal('modal-category-mgr');
+    }
+    async function handleSaveCategoryModal(e) {
+      e.preventDefault();
+      const mode = document.getElementById('cat-modal-mode').value, val = document.getElementById('cat-modal-input').value.trim().toUpperCase();
+      if (!val || val === 'TUTTI') return;
+      if (mode === 'rename') {
+        const oldCat = state.soundCategory; state.categories[state.categories.indexOf(oldCat)] = val;
+        state.pads.forEach(p => { if (p.category === oldCat) { p.category = val; window.cloudBridge.savePad(p); }}); state.soundCategory = val;
+      } else {
+        if (!state.categories.includes(val)) state.categories.push(val); state.soundCategory = val;
+      }
+      saveLocalBackup(); closeModal('modal-category-mgr'); renderSoundboardCategories(); renderSoundboard();
+      await window.cloudBridge.saveCategories(state.categories);
+    }
+    async function deleteActiveCategory() {
+      const cat = state.soundCategory; if (cat === 'TUTTI') return;
+      state.categories = state.categories.filter(c => c !== cat);
+      state.pads.forEach(p => { if (p.category === cat) { p.category = 'RANDOM'; window.cloudBridge.savePad(p); } });
+      state.soundCategory = 'TUTTI'; saveLocalBackup(); renderSoundboardCategories(); renderSoundboard();
+      await window.cloudBridge.saveCategories(state.categories); showToast(`Categoria rimossa`);
+    }
+
+    let draggedPadId = null;
+    function renderSoundboard() {
+      const grid = document.getElementById('soundboard-grid'); if (!grid) return; grid.innerHTML = '';
+      const query = (document.getElementById('sound-search-input')?.value || '').toLowerCase();
+      let pads = state.pads.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      if (state.soundCategory !== 'TUTTI') pads = pads.filter(p => p.category === state.soundCategory);
+      if (query.trim()) pads = pads.filter(p => p.name.toLowerCase().includes(query));
+
+      if (pads.length === 0) {
+        grid.innerHTML = `<div class="col-span-full py-16 text-center text-slate-500 bg-slate-900/40 rounded-3xl border border-dashed border-slate-800"><i data-lucide="volume-x" class="w-10 h-10 mx-auto mb-2 text-slate-600"></i><p class="text-sm font-bold">Nessun tasto audio</p></div>`;
+        lucide.createIcons(); return;
+      }
+      pads.forEach(pad => grid.appendChild(createPadButtonElement(pad)));
+      lucide.createIcons();
+    }
+
+    function createPadButtonElement(pad) {
+      const col = pad.color || PAD_COLORS[0], sizeClass = pad.size === 'large' ? 'col-span-2 h-40' : (pad.size === 'compact' ? 'h-28' : 'h-36');
+      const div = document.createElement('div'); div.id = 'pad-btn-' + pad.id; div.draggable = true;
+      div.className = `relative group select-none rounded-3xl p-3.5 flex flex-col justify-between ${sizeClass} transition-all duration-150 cursor-pointer shadow-lg hover:brightness-110 active:scale-95 border-2`;
+      div.style.backgroundColor = col.bg; div.style.borderColor = col.border;
+      const durText = pad.duration ? `${Number(pad.duration).toFixed(1)}s` : 'VUOTO';
+      div.innerHTML = `
+        <div class="flex items-center justify-between w-full z-10">
+          <div class="flex items-center gap-1.5">
+            <span class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-black/40" style="color: ${col.text}">${durText}</span>
+            <button type="button" onclick="event.stopPropagation(); togglePadLoopQuick('${pad.id}')" class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${pad.loop ? 'bg-cyan-400 text-slate-950' : 'bg-black/30 text-slate-400 hover:text-white'}" title="Loop">🔁</button>
+          </div>
+          <button type="button" onclick="event.stopPropagation(); openPadConfig('${pad.id}')" class="p-1.5 rounded-xl bg-black/40 hover:bg-black/70 text-white"><i data-lucide="settings" class="w-3.5 h-3.5"></i></button>
+        </div>
+        <div class="flex flex-col items-center justify-center my-auto pointer-events-none">
+          <div class="mb-1" style="color: ${col.text}"><i data-lucide="${pad.icon || 'volume-2'}" class="w-7 h-7"></i></div>
+          <span class="block font-black text-xs sm:text-sm tracking-wide text-center line-clamp-2 uppercase px-1" style="color: ${col.text}">${escapeHtml(pad.name)}</span>
+        </div>
+        <div class="flex items-center justify-between gap-2 w-full z-10 pt-1 border-t border-white/10" onclick="event.stopPropagation()">
+          <span id="pad-status-${pad.id}" onclick="playPadSound('${pad.id}')" class="text-[9px] font-black tracking-wider uppercase cursor-pointer" style="color: ${col.text}">▶ PLAY</span>
+          <input type="range" min="0" max="1.5" step="0.05" value="${pad.volume ?? 1}" oninput="changePadVolumeInline('${pad.id}', this.value)" class="w-16 h-1 bg-black/50 rounded cursor-pointer">
+        </div>
+      `;
+      div.onclick = () => playPadSound(pad.id);
+      div.addEventListener('dragstart', () => { draggedPadId = pad.id; div.classList.add('pad-dragging'); });
+      div.addEventListener('dragend', () => div.classList.remove('pad-dragging'));
+      div.addEventListener('dragover', e => e.preventDefault());
+      div.addEventListener('drop', e => { e.preventDefault(); if (draggedPadId && draggedPadId !== pad.id) reorderPadsByDrop(draggedPadId, pad.id); });
+      return div;
+    }
+
+    async function togglePadLoopQuick(padId) {
+      const pad = state.pads.find(p => p.id === padId); if (!pad) return;
+      pad.loop = !pad.loop; saveLocalBackup(); renderSoundboard(); await window.cloudBridge.savePad(pad);
+    }
+    function changePadVolumeInline(padId, val) {
+      const pad = state.pads.find(p => p.id === padId); if (!pad) return; pad.volume = parseFloat(val);
+      if (audioCtx) activeSoundInstances.forEach(inst => { if (inst.padId === padId) inst.gainNode.gain.setValueAtTime(pad.volume * state.masterVolume, audioCtx.currentTime); });
+      saveLocalBackup();
+    }
+    async function reorderPadsByDrop(sourceId, targetId) {
+      const sorted = state.pads.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const fromIdx = sorted.findIndex(p => p.id === sourceId), toIdx = sorted.findIndex(p => p.id === targetId);
+      if (fromIdx === -1 || toIdx === -1) return;
+      const [moved] = sorted.splice(fromIdx, 1); sorted.splice(toIdx, 0, moved);
+      sorted.forEach((p, idx) => { p.order = idx; }); state.pads = sorted;
+      saveLocalBackup(); renderSoundboard(); for (const p of state.pads) window.cloudBridge.savePad(p);
+    }
+
+    /* ================= PAD CONFIGURATION ================= */
+    let editingPadId = null;
+    async function openCreateSoundModal() {
+      const newPad = {
+        id: 'pad-' + Date.now(), name: 'NUOVO SUONO', category: state.soundCategory === 'TUTTI' ? 'MEME' : state.soundCategory,
+        color: { ...PAD_COLORS[Math.floor(Math.random() * PAD_COLORS.length)] }, icon: PAD_ICONS[Math.floor(Math.random() * PAD_ICONS.length)],
+        size: 'normal', loop: false, volume: 1.0, audioDataUrl: '', synthType: null, duration: 0, order: state.pads.length
+      };
+      state.pads.push(newPad); saveLocalBackup(); renderSoundboard(); refreshUI(); openPadConfig(newPad.id); await window.cloudBridge.savePad(newPad);
+    }
+
+    function openPadConfig(padId) {
+      editingPadId = padId; const pad = state.pads.find(p => p.id === padId); if (!pad) return;
+      document.getElementById('cfg-pad-id').value = pad.id; document.getElementById('cfg-pad-name').value = pad.name;
+      document.getElementById('cfg-pad-loop').checked = !!pad.loop; document.getElementById('cfg-pad-vol').value = pad.volume ?? 1.0;
+      document.getElementById('cfg-vol-val').textContent = Math.round((pad.volume ?? 1.0) * 100) + '%'; document.getElementById('cfg-pad-size').value = pad.size || 'normal';
+      document.getElementById('cfg-pad-bg-color').value = pad.color?.bg || '#083344'; document.getElementById('cfg-pad-text-color').value = pad.color?.text || '#67e8f9';
+
+      const catSelect = document.getElementById('cfg-pad-category'); catSelect.innerHTML = '';
+      state.categories.filter(c => c !== 'TUTTI').forEach(c => catSelect.appendChild(new Option(c, c, false, c === pad.category)));
+
+      const colorCont = document.getElementById('cfg-color-picker'); colorCont.innerHTML = '';
+      PAD_COLORS.forEach(c => {
+        const btn = document.createElement('button'); btn.type = 'button'; btn.className = 'w-7 h-7 rounded-full border-2 border-white/20 hover:scale-110'; btn.style.backgroundColor = c.border;
+        btn.onclick = () => { pad.color = { ...c }; document.getElementById('cfg-pad-bg-color').value = c.bg; document.getElementById('cfg-pad-text-color').value = c.text; };
+        colorCont.appendChild(btn);
+      });
+
+      const iconCont = document.getElementById('cfg-icon-picker'); iconCont.innerHTML = '';
+      PAD_ICONS.forEach(ic => {
+        const btn = document.createElement('button'); btn.type = 'button'; btn.className = `p-2 rounded-xl border text-xs ${pad.icon === ic ? 'bg-cyan-400 text-slate-950 border-cyan-300' : 'bg-slate-950 text-slate-400 border-slate-800'}`;
+        btn.innerHTML = `<i data-lucide="${ic}" class="w-4 h-4"></i>`; btn.onclick = () => { pad.icon = ic; openPadConfig(pad.id); };
+        iconCont.appendChild(btn);
+      });
+
+      const statusLabel = document.getElementById('cfg-audio-status');
+      if (pad.audioDataUrl || pad.synthType) { statusLabel.textContent = `Audio pronto (${pad.duration ? Number(pad.duration).toFixed(2) + 's' : 'Attivo'})`; statusLabel.className = 'text-xs text-emerald-400 font-mono font-bold'; }
+      else { statusLabel.textContent = 'Tasto vuoto — Clicca su APRI EDITOR AUDIO'; statusLabel.className = 'text-xs text-amber-400 font-mono'; }
+      openModal('modal-pad-config'); lucide.createIcons();
+    }
+
+    async function savePadConfig() {
+      if (!editingPadId) return; const pad = state.pads.find(p => p.id === editingPadId); if (!pad) return;
+      pad.name = document.getElementById('cfg-pad-name').value.trim() || 'SUONO'; pad.category = document.getElementById('cfg-pad-category').value;
+      pad.loop = document.getElementById('cfg-pad-loop').checked; pad.volume = parseFloat(document.getElementById('cfg-pad-vol').value); pad.size = document.getElementById('cfg-pad-size').value;
+      pad.color = { name: 'Custom', bg: document.getElementById('cfg-pad-bg-color').value, border: document.getElementById('cfg-pad-text-color').value, text: document.getElementById('cfg-pad-text-color').value };
+      saveLocalBackup(); closeModal('modal-pad-config'); renderSoundboard(); await window.cloudBridge.savePad(pad); showToast("Personalizzazione tasto salvata!");
+    }
+
+    async function moveCurrentPad(dir) {
+      if (!editingPadId) return; const sorted = state.pads.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      const idx = sorted.findIndex(p => p.id === editingPadId), targetIdx = idx + dir;
+      if (idx === -1 || targetIdx < 0 || targetIdx >= sorted.length) return;
+      const temp = sorted[idx]; sorted[idx] = sorted[targetIdx]; sorted[targetIdx] = temp;
+      sorted.forEach((p, i) => { p.order = i; }); state.pads = sorted;
+      saveLocalBackup(); renderSoundboard(); for (const p of state.pads) window.cloudBridge.savePad(p);
+    }
+    async function duplicateCurrentPad() {
+      if (!editingPadId) return; const pad = state.pads.find(p => p.id === editingPadId); if (!pad) return;
+      const copy = { ...pad, id: 'pad-' + Date.now(), name: pad.name + ' (2)', color: { ...(pad.color || PAD_COLORS[0]) }, order: state.pads.length };
+      state.pads.push(copy); saveLocalBackup(); closeModal('modal-pad-config'); renderSoundboard(); refreshUI(); await window.cloudBridge.savePad(copy); showToast("Tasto duplicato!");
+    }
+    async function deleteCurrentPad() {
+      if (!editingPadId) return; const idToRemove = editingPadId; state.pads = state.pads.filter(p => p.id !== idToRemove); delete decodedPadBufferCache[idToRemove];
+      saveLocalBackup(); closeModal('modal-pad-config'); renderSoundboard(); refreshUI(); await window.cloudBridge.deletePad(idToRemove); showToast("Tasto eliminato");
+    }
+
+    /* ================= VISUAL WAVEFORM EDITOR ================= */
+    let editorCurrentAudioBuffer = null, editorSelection = { start: 0, end: 0 }, editorZoomLevel = 1.0, editorSourceNode = null, editorIsPlaying = false, activeDragMode = null, dragAnchorSec = 0;
+    let editorUndoStack = [], editorRedoStack = [];
+
+    function pushEditorHistory() {
+      if (!editorCurrentAudioBuffer) return;
+      editorUndoStack.push({ start: editorSelection.start, end: editorSelection.end, gain: document.getElementById('fx-gain').value, speed: document.getElementById('fx-speed').value, pitch: document.getElementById('fx-pitch').value, reverse: document.getElementById('fx-reverse').checked, normalize: document.getElementById('fx-normalize').checked, echo: document.getElementById('fx-echo').checked });
+      if (editorUndoStack.length > 25) editorUndoStack.shift(); editorRedoStack = [];
+    }
+    function applyEditorHistoryState(snap) {
+      if (!snap) return;
+      editorSelection.start = snap.start; editorSelection.end = snap.end; document.getElementById('fx-gain').value = snap.gain; document.getElementById('fx-gain-val').textContent = Math.round(snap.gain * 100) + '%'; document.getElementById('fx-speed').value = snap.speed; document.getElementById('fx-speed-val').textContent = parseFloat(snap.speed).toFixed(2) + 'x'; document.getElementById('fx-pitch').value = snap.pitch; document.getElementById('fx-pitch-val').textContent = snap.pitch + ' st'; document.getElementById('fx-reverse').checked = snap.reverse; document.getElementById('fx-normalize').checked = snap.normalize; document.getElementById('fx-echo').checked = snap.echo; updateSelectionUI();
+    }
+    function editorUndo() { if (editorUndoStack.length === 0) return; editorRedoStack.push({ start: editorSelection.start, end: editorSelection.end, gain: document.getElementById('fx-gain').value, speed: document.getElementById('fx-speed').value, pitch: document.getElementById('fx-pitch').value, reverse: document.getElementById('fx-reverse').checked, normalize: document.getElementById('fx-normalize').checked, echo: document.getElementById('fx-echo').checked }); applyEditorHistoryState(editorUndoStack.pop()); }
+    function editorRedo() { if (editorRedoStack.length === 0) return; const next = editorRedoStack.pop(); editorUndoStack.push(next); applyEditorHistoryState(next); }
+
+    async function openAudioEditorForCurrentPad() {
+      closeModal('modal-pad-config'); openModal('modal-audio-editor'); resetAudioEffects(); editorUndoStack = []; editorRedoStack = [];
+      const pad = state.pads.find(p => p.id === editingPadId);
+      if (pad && pad.audioDataUrl) {
+        try { const decoded = await getAudioContext().decodeAudioData((await dataURLToArrayBuffer(pad.audioDataUrl)).slice(0)); setupEditorWithBuffer(decoded, pad.name); }
+        catch (e) { clearWaveformEditor(); }
+      } else clearWaveformEditor();
+      lucide.createIcons();
+    }
+    function clearWaveformEditor() {
+      editorCurrentAudioBuffer = null; editorSelection = { start: 0, end: 0 }; document.getElementById('editor-filename').textContent = 'Nessun file caricato';
+      document.getElementById('editor-in-time').value = 0; document.getElementById('editor-out-time').value = 0; document.getElementById('editor-cut-duration').textContent = '0.00s';
+      document.getElementById('wave-selection-overlay')?.classList.add('hidden'); document.getElementById('wave-duration-display').textContent = 'Durata Totale: 0.00s';
+      const cvs = document.getElementById('waveform-canvas'); if (cvs) cvs.getContext('2d').clearRect(0, 0, cvs.width, cvs.height);
+    }
+    function setupEditorWithBuffer(decodedBuffer, labelName) {
+      editorCurrentAudioBuffer = decodedBuffer; const dur = decodedBuffer.duration; editorSelection.start = 0; editorSelection.end = dur;
+      document.getElementById('editor-filename').textContent = labelName || 'Traccia Audio';
+      document.getElementById('ruler-q1').textContent = (dur * 0.25).toFixed(2) + 's'; document.getElementById('ruler-mid').textContent = (dur * 0.50).toFixed(2) + 's'; document.getElementById('ruler-q3').textContent = (dur * 0.75).toFixed(2) + 's'; document.getElementById('ruler-end').textContent = dur.toFixed(2) + 's';
+      document.getElementById('wave-duration-display').textContent = `Durata Totale: ${dur.toFixed(2)}s`;
+      updateSelectionUI(); setTimeout(() => drawWaveform(), 30);
+    }
+    function setEditorProgress(visible, text = '', pct = 50) {
+      const wrap = document.getElementById('editor-progress-wrap'); if (!wrap) return;
+      if (visible) { wrap.classList.remove('hidden'); wrap.classList.add('flex'); document.getElementById('editor-loading-text').textContent = text; document.getElementById('editor-progress-pct').textContent = Math.round(pct) + '%'; document.getElementById('editor-progress-bar').style.width = pct + '%'; }
+      else { wrap.classList.add('hidden'); wrap.classList.remove('flex'); }
+    }
+    async function handleEditorFileUpload(input) {
+      if (!input.files || !input.files[0]) return; const file = input.files[0]; setEditorProgress(true, `Estrazione da "${file.name}"...`, 25);
+      try {
+        const decoded = await extractAudioBufferFromFile(file, (pct, msg) => setEditorProgress(true, msg, pct));
+        setEditorProgress(true, 'Generazione waveform...', 95); setupEditorWithBuffer(decoded, file.name); pushEditorHistory(); showToast("Pronto per il taglio!");
+      } catch (err) { showToast("Formato non supportato o senza audio.", true); }
+      finally { setEditorProgress(false); input.value = ''; }
+    }
+    async function extractAudioBufferFromFile(fileOrBlob, onProgress) {
+      const ctx = getAudioContext(), arrayBuf = await fileOrBlob.arrayBuffer(); if (onProgress) onProgress(45, 'Decodifica...');
+      try { return await ctx.decodeAudioData(arrayBuf.slice(0)); } catch (err) { if (onProgress) onProgress(60, 'Estrazione video in corso...'); }
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(fileOrBlob), video = document.createElement('video'); video.src = url; video.muted = false; video.playsInline = true; video.crossOrigin = 'anonymous';
+        video.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Errore decodifica video")); };
+        video.onloadedmetadata = () => {
+          const chunks = [], sourceNode = ctx.createMediaElementSource(video), processor = ctx.createScriptProcessor(4096, 1, 1);
+          processor.onaudioprocess = (e) => { chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); if (video.duration && onProgress) onProgress(Math.min(92, 60 + (video.currentTime / video.duration) * 32), `Estrazione audio...`); };
+          const silentGain = ctx.createGain(); silentGain.gain.value = 0.0001; sourceNode.connect(processor); processor.connect(silentGain); silentGain.connect(ctx.destination);
+          video.onended = () => {
+            sourceNode.disconnect(); processor.disconnect(); silentGain.disconnect(); URL.revokeObjectURL(url);
+            const totalLen = chunks.reduce((acc, c) => acc + c.length, 0);
+            if (totalLen === 0) { reject(new Error("Nessun audio estratto")); return; }
+            const outBuf = ctx.createBuffer(1, totalLen, ctx.sampleRate), outChannel = outBuf.getChannelData(0);
+            let offset = 0; chunks.forEach(c => { outChannel.set(c, offset); offset += c.length; }); resolve(outBuf);
+          };
+          video.play().catch(reject);
+        };
+      });
+    }
+
+    function drawWaveform() {
+      const cvs = document.getElementById('waveform-canvas'), cnt = document.getElementById('waveform-container'); if (!cvs || !cnt || !editorCurrentAudioBuffer) return;
+      const dpr = window.devicePixelRatio || 1; cvs.width = cnt.clientWidth * dpr; cvs.height = cnt.clientHeight * dpr;
+      const ctx = cvs.getContext('2d'); ctx.clearRect(0, 0, cvs.width, cvs.height);
+      const raw = editorCurrentAudioBuffer.getChannelData(0), step = Math.max(1, Math.ceil(raw.length / cvs.width)), amp = cvs.height / 2;
+      ctx.strokeStyle = '#1e293b'; ctx.beginPath(); ctx.moveTo(0, amp); ctx.lineTo(cvs.width, amp); ctx.stroke();
+      const grad = ctx.createLinearGradient(0, 0, 0, cvs.height); grad.addColorStop(0, '#38bdf8'); grad.addColorStop(0.5, '#0284c7'); grad.addColorStop(1, '#38bdf8'); ctx.fillStyle = grad;
+      for (let i = 0; i < cvs.width; i++) {
+        let min = 1.0, max = -1.0, start = i * step;
+        for (let j = 0; j < step; j++) { const d = raw[start + j] || 0; if (d < min) min = d; if (d > max) max = d; }
+        ctx.fillRect(i, (1 + min) * amp, 1, Math.max(2, (max - min) * amp));
+      }
+    }
+    function setWaveformZoom(val) { editorZoomLevel = parseFloat(val); document.getElementById('zoom-val-label').textContent = editorZoomLevel.toFixed(1) + 'x'; const cnt = document.getElementById('waveform-container'); if (cnt) { cnt.style.width = (editorZoomLevel * 100) + '%'; drawWaveform(); updateSelectionOverlay(); } }
+
+    function getPointerSecOnWaveform(clientX) {
+      const cnt = document.getElementById('waveform-container'); if (!cnt || !editorCurrentAudioBuffer) return 0;
+      const rect = cnt.getBoundingClientRect(); return (Math.max(0, Math.min(clientX - rect.left, rect.width)) / rect.width) * editorCurrentAudioBuffer.duration;
+    }
+    function initWaveformInteraction() {
+      const cnt = document.getElementById('waveform-container'), hStart = document.getElementById('handle-start'), hEnd = document.getElementById('handle-end'); if (!cnt) return;
+      const startDrag = (mode, x, e) => { if (!editorCurrentAudioBuffer) return; e.stopPropagation(); pushEditorHistory(); activeDragMode = mode; const sec = getPointerSecOnWaveform(x); if (mode === 'region') { dragAnchorSec = sec; editorSelection.start = sec; editorSelection.end = sec; updateSelectionUI(); } };
+      hStart?.addEventListener('mousedown', e => startDrag('start', e.clientX, e)); hEnd?.addEventListener('mousedown', e => startDrag('end', e.clientX, e)); cnt.addEventListener('mousedown', e => startDrag('region', e.clientX, e));
+      hStart?.addEventListener('touchstart', e => startDrag('start', e.touches[0].clientX, e), { passive: true }); hEnd?.addEventListener('touchstart', e => startDrag('end', e.touches[0].clientX, e), { passive: true }); cnt.addEventListener('touchstart', e => startDrag('region', e.touches[0].clientX, e), { passive: true });
+      const moveDrag = (x) => {
+        if (!activeDragMode || !editorCurrentAudioBuffer) return; const sec = getPointerSecOnWaveform(x), dur = editorCurrentAudioBuffer.duration;
+        if (activeDragMode === 'start') editorSelection.start = Math.max(0, Math.min(sec, editorSelection.end - 0.05));
+        else if (activeDragMode === 'end') editorSelection.end = Math.min(dur, Math.max(sec, editorSelection.start + 0.05));
+        else if (activeDragMode === 'region') { editorSelection.start = Math.max(0, Math.min(dragAnchorSec, sec)); editorSelection.end = Math.min(dur, Math.max(dragAnchorSec, sec)); }
+        updateSelectionUI();
+      };
+      window.addEventListener('mousemove', e => moveDrag(e.clientX)); window.addEventListener('touchmove', e => { if (activeDragMode && e.touches[0]) moveDrag(e.touches[0].clientX); }, { passive: true });
+      const endDrag = () => { if (!activeDragMode) return; if (editorCurrentAudioBuffer && Math.abs(editorSelection.end - editorSelection.start) < 0.05) { editorSelection.end = Math.min(editorCurrentAudioBuffer.duration, editorSelection.start + 1.5); updateSelectionUI(); } activeDragMode = null; };
+      window.addEventListener('mouseup', endDrag); window.addEventListener('touchend', endDrag);
+    }
+    function updateSelectionFromInputs() {
+      if (!editorCurrentAudioBuffer) return; const dur = editorCurrentAudioBuffer.duration, s = parseFloat(document.getElementById('editor-in-time').value) || 0, e = parseFloat(document.getElementById('editor-out-time').value) || 0;
+      editorSelection.start = Math.max(0, Math.min(s, dur)); editorSelection.end = Math.max(editorSelection.start + 0.05, Math.min(e, dur)); updateSelectionUI(true);
+    }
+    function updateSelectionUI(skipInputs = false) {
+      const cutDur = Math.max(0, editorSelection.end - editorSelection.start);
+      if (!skipInputs) { document.getElementById('editor-in-time').value = editorSelection.start.toFixed(2); document.getElementById('editor-out-time').value = editorSelection.end.toFixed(2); }
+      document.getElementById('editor-cut-duration').textContent = cutDur.toFixed(2) + 's'; updateSelectionOverlay();
+    }
+    function updateSelectionOverlay() {
+      const overlay = document.getElementById('wave-selection-overlay'); if (!editorCurrentAudioBuffer || !overlay) return; overlay.classList.remove('hidden');
+      const dur = editorCurrentAudioBuffer.duration; overlay.style.left = ((editorSelection.start / dur) * 100) + '%'; overlay.style.width = Math.max(0.5, ((editorSelection.end - editorSelection.start) / dur) * 100) + '%';
+    }
+    function stopEditorPreview() { if (editorSourceNode) { try { editorSourceNode.stop(); } catch (e) {} editorSourceNode = null; } editorIsPlaying = false; }
+    function togglePlayOriginal() { if (!editorCurrentAudioBuffer) return; if (editorIsPlaying) { stopEditorPreview(); return; } playEditorBuffer(editorCurrentAudioBuffer, 0, editorCurrentAudioBuffer.duration, false, false); }
+    function playSelectionPreview() { if (!editorCurrentAudioBuffer) return; stopEditorPreview(); playEditorBuffer(editorCurrentAudioBuffer, editorSelection.start, Math.max(0.05, editorSelection.end - editorSelection.start), document.getElementById('editor-loop-selection').checked, true); }
+
+    function buildProcessedSliceBuffer(sourceBuffer, startSec, durationSec) {
+      const ctx = getAudioContext(), sr = sourceBuffer.sampleRate, startSample = Math.floor(startSec * sr), len = Math.max(1, Math.floor(durationSec * sr));
+      const sliceBuf = ctx.createBuffer(1, len, sr), srcData = sourceBuffer.getChannelData(0), dstData = sliceBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) dstData[i] = srcData[startSample + i] || 0;
+      if (document.getElementById('fx-reverse').checked) dstData.reverse();
+      if (document.getElementById('fx-normalize').checked) {
+        let peak = 0; for (let i = 0; i < len; i++) if (Math.abs(dstData[i]) > peak) peak = Math.abs(dstData[i]);
+        if (peak > 0.001) { const f = 0.96 / peak; for (let i = 0; i < len; i++) dstData[i] *= f; }
+      }
+      return sliceBuf;
+    }
+    function getCombinedPlaybackRate() { return (parseFloat(document.getElementById('fx-speed').value) || 1.0) * Math.pow(2, (parseFloat(document.getElementById('fx-pitch').value) || 0) / 12); }
+
+    function playEditorBuffer(buffer, start, duration, loop = false, applyFx = false) {
+      const ctx = getAudioContext(), source = ctx.createBufferSource();
+      if (applyFx) {
+        const sliced = buildProcessedSliceBuffer(buffer, start, duration); source.buffer = sliced; source.loop = loop;
+        const rate = getCombinedPlaybackRate(); source.playbackRate.setValueAtTime(rate, ctx.currentTime);
+        const gainNode = ctx.createGain(), base = parseFloat(document.getElementById('fx-gain').value) || 1.0, fi = parseFloat(document.getElementById('fx-fadein').value) || 0, fo = parseFloat(document.getElementById('fx-fadeout').value) || 0, effDur = sliced.duration / rate;
+        gainNode.gain.setValueAtTime(fi > 0 ? 0.001 : base, ctx.currentTime);
+        if (fi > 0) gainNode.gain.linearRampToValueAtTime(base, ctx.currentTime + Math.min(fi, effDur));
+        if (fo > 0 && !loop) { gainNode.gain.setValueAtTime(base, ctx.currentTime + Math.max(0, effDur - fo)); gainNode.gain.linearRampToValueAtTime(0.001, ctx.currentTime + effDur); }
+        source.connect(gainNode);
+        if (document.getElementById('fx-echo').checked) {
+          const delay = ctx.createDelay(), fb = ctx.createGain(); delay.delayTime.value = 0.22; fb.gain.value = 0.35;
+          gainNode.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(ctx.destination);
+        }
+        gainNode.connect(ctx.destination); source.start(0);
+      } else { source.buffer = buffer; source.connect(ctx.destination); source.start(0, start, duration); }
+      editorSourceNode = source; editorIsPlaying = true; source.onended = () => { editorIsPlaying = false; };
+    }
+    function resetAudioEffects() {
+      ['fx-gain', 'fx-speed', 'fx-pitch', 'fx-fadein', 'fx-fadeout'].forEach(id => document.getElementById(id).value = id==='fx-gain'||id==='fx-speed'?1:0);
+      document.getElementById('fx-gain-val').textContent = '100%'; document.getElementById('fx-speed-val').textContent = '1.00x'; document.getElementById('fx-pitch-val').textContent = '0 st'; document.getElementById('fx-fadein-val').textContent = '0s'; document.getElementById('fx-fadeout-val').textContent = '0s';
+      ['fx-echo', 'fx-reverse', 'fx-normalize'].forEach(id => document.getElementById(id).checked = false);
+    }
+    async function saveAudioCutToPad() {
+      if (!editorCurrentAudioBuffer || !editingPadId) { showToast("Carica prima un file audio o video!", true); return; }
+      const pad = state.pads.find(p => p.id === editingPadId); if (!pad) return;
+      setEditorProgress(true, 'Rendering finale effetti e taglio...', 60);
+      try {
+        const rawDur = Math.max(0.05, editorSelection.end - editorSelection.start), sliced = buildProcessedSliceBuffer(editorCurrentAudioBuffer, editorSelection.start, rawDur);
+        const rate = getCombinedPlaybackRate(), hasEcho = document.getElementById('fx-echo').checked, outDur = (sliced.duration / rate) + (hasEcho ? 0.6 : 0);
+        const trgSr = outDur > 18 ? 16000 : 22050, offCtx = new OfflineAudioContext(1, Math.max(1, Math.ceil(outDur * trgSr)), trgSr);
+        const source = offCtx.createBufferSource(); source.buffer = sliced; source.playbackRate.setValueAtTime(rate, 0);
+        const gainNode = offCtx.createGain(), base = parseFloat(document.getElementById('fx-gain').value) || 1.0, fi = parseFloat(document.getElementById('fx-fadein').value) || 0, fo = parseFloat(document.getElementById('fx-fadeout').value) || 0, cDur = sliced.duration / rate;
+        gainNode.gain.setValueAtTime(fi > 0 ? 0.001 : base, 0); if (fi > 0) gainNode.gain.linearRampToValueAtTime(base, Math.min(fi, cDur)); if (fo > 0) { gainNode.gain.setValueAtTime(base, Math.max(0, cDur - fo)); gainNode.gain.linearRampToValueAtTime(0.001, cDur); }
+        source.connect(gainNode);
+        if (hasEcho) { const delay = offCtx.createDelay(), fb = offCtx.createGain(); delay.delayTime.value = 0.22; fb.gain.value = 0.35; gainNode.connect(delay); delay.connect(fb); fb.connect(delay); delay.connect(offCtx.destination); }
+        gainNode.connect(offCtx.destination); source.start(0);
+        const rendered = await offCtx.startRendering();
+        pad.audioDataUrl = await blobToDataURL(audioBufferToWavBlob(rendered, trgSr)); pad.duration = Number(rendered.duration.toFixed(2)); pad.synthType = null; decodedPadBufferCache[pad.id] = rendered;
+        stopEditorPreview(); setEditorProgress(false); closeModal('modal-audio-editor'); saveLocalBackup(); renderSoundboard(); await window.cloudBridge.savePad(pad); showToast(`Audio salvato (${pad.duration}s)!`);
+      } catch (err) { setEditorProgress(false); showToast("Errore salvataggio audio", true); }
+    }
+    function audioBufferToWavBlob(buffer, sr) {
+      const data = buffer.getChannelData(0), rate = sr || buffer.sampleRate, size = data.length * 2, ab = new ArrayBuffer(44 + size), v = new DataView(ab);
+      const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      ws(0, 'RIFF'); v.setUint32(4, 36 + size, true); ws(8, 'WAVE'); ws(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); ws(36, 'data'); v.setUint32(40, size, true);
+      for (let i = 0, o = 44; i < data.length; i++, o += 2) { const s = Math.max(-1, Math.min(1, data[i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7FFF, true); }
+      return new Blob([v], { type: 'audio/wav' });
+    }
+
+    /* ================= GENERAL UI HELPERS ================= */
+    function openModal(id) { const el = document.getElementById(id); if (el) { el.classList.remove('hidden'); el.classList.add('flex'); } }
+    function closeModal(id) { const el = document.getElementById(id); if (el) { el.classList.add('hidden'); el.classList.remove('flex'); } if (id === 'modal-audio-editor') stopEditorPreview(); }
+    function showToast(text, isError = false) {
+      const toast = document.getElementById('toast-msg'), toastText = document.getElementById('toast-text'); if (!toast || !toastText) return;
+      toastText.textContent = text; toast.className = `fixed bottom-5 right-5 z-[9999] ${isError ? 'bg-rose-950 border-rose-600' : 'bg-slate-900 border-emerald-500/50'} border text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 transform translate-y-0 opacity-100 transition-all duration-300 pointer-events-auto`;
+      setTimeout(() => { toast.className = 'fixed bottom-5 right-5 z-[9999] bg-slate-900 border border-slate-700 text-white px-4 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 transform translate-y-24 opacity-0 transition-all duration-300 pointer-events-none'; }, 3200);
+    }
+    function refreshUI() {
+      const mc = document.getElementById('menu-memotti-count'), pc = document.getElementById('menu-sounds-count');
+      if (mc) mc.textContent = `${state.memes.length} memott${state.memes.length === 1 ? 'o' : 'i'}`;
+      if (pc) pc.textContent = `${state.pads.length} suon${state.pads.length === 1 ? 'o' : 'i'}`;
+      renderMemes(); renderSoundboardCategories(); renderSoundboard(); lucide.createIcons();
+    }
+    function escapeHtml(str) { return String(str || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' })[m]); }
+    function escapeJsStr(str) { return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+    window.addEventListener('resize', () => { if (editorCurrentAudioBuffer) { drawWaveform(); updateSelectionOverlay(); } });
+
+    /* BOOT */
+    loadLocalBackup().then(() => { initWaveformInteraction(); refreshUI(); });
+  </script>
+
+  <!-- ========================================================
+       FIREBASE FIRESTORE REAL-TIME SYNC MODULE (FIXED)
        ======================================================== -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import {
-      getFirestore,
-      collection,
-      doc,
-      setDoc,
-      getDoc,
-      deleteDoc,
-      onSnapshot
-    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyABnKY_-yqzz5r_SQXWKoetthHC5lgWFik",
@@ -3027,25 +3996,30 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-
-    const CHUNK_SIZE = 500000; // 500KB per chunk so documents stay safely under 1MB Firestore limit
+    const CHUNK_SIZE = 500000;
+    
+    // Memory Cache: risolve lo sfarfallio e la sparizione dei file quando onSnapshot aggiorna il database.
+    const mediaCache = {};
 
     async function savePossiblyChunkedItem(colName, item) {
-      updateCloudBadge('syncing', 'Sincronizzazione...');
+      updateCloudBadge('syncing', 'Upload Dati & File...');
       try {
         const copy = { ...item };
         const audioStr = copy.audioDataUrl || '';
+        
+        // Lo iniettiamo subito in cache così non "sparisce" mentre salva
+        if (audioStr) mediaCache[copy.id] = audioStr;
 
         if (audioStr.length > CHUNK_SIZE) {
           const totalChunks = Math.ceil(audioStr.length / CHUNK_SIZE);
+          const uploadPromises = []; // Eseguiamo gli upload in parallelo per azzerare i crash/ritardi
+          
           for (let i = 0; i < totalChunks; i++) {
             const slice = audioStr.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-            await setDoc(doc(db, "audio_chunks", `${copy.id}_chunk_${i}`), {
-              parentId: copy.id,
-              index: i,
-              data: slice
-            });
+            uploadPromises.push(setDoc(doc(db, "audio_chunks", `${copy.id}_chunk_${i}`), { parentId: copy.id, index: i, data: slice }));
           }
+          await Promise.all(uploadPromises);
+          
           copy.audioDataUrl = '';
           copy.audioChunkCount = totalChunks;
         } else {
@@ -3056,134 +4030,86 @@
         state.cloudConnected = true;
         updateCloudBadge('online', 'Cloud Sincronizzato');
       } catch (err) {
-        console.warn(`Firestore write warning (${colName}):`, err);
-        updateCloudBadge('offline', 'Locale (Controlla Regole Firebase)');
+        console.warn(`Upload fallito (${colName}):`, err);
+        updateCloudBadge('offline', 'Locale (Errore Connessione)');
       }
     }
 
     async function reassembleAudioChunksIfNeeded(docData) {
+      // Se lo abbiamo già scaricato in memoria, ricaricalo fulmineamente
+      if (mediaCache[docData.id]) {
+        return { ...docData, audioDataUrl: mediaCache[docData.id] };
+      }
+
       if (!docData.audioChunkCount || docData.audioChunkCount <= 0) {
+        if (docData.audioDataUrl) mediaCache[docData.id] = docData.audioDataUrl;
         return docData;
       }
+
       try {
         let fullAudio = '';
+        const fetchPromises = [];
         for (let i = 0; i < docData.audioChunkCount; i++) {
-          const snap = await getDoc(doc(db, "audio_chunks", `${docData.id}_chunk_${i}`));
-          if (snap.exists()) {
-            fullAudio += snap.data().data || '';
-          }
+          fetchPromises.push(getDoc(doc(db, "audio_chunks", `${docData.id}_chunk_${i}`)));
         }
+        // Scarichiamo tutto in contemporanea
+        const snaps = await Promise.all(fetchPromises);
+        snaps.forEach(snap => { if (snap.exists()) fullAudio += snap.data().data || ''; });
+        
+        mediaCache[docData.id] = fullAudio;
         return { ...docData, audioDataUrl: fullAudio };
-      } catch (e) {
-        return docData;
-      }
+      } catch (e) { return docData; }
     }
 
     async function deleteItemAndChunks(colName, id) {
       try {
         await deleteDoc(doc(db, colName, id));
+        delete mediaCache[id];
+        const delPromises = [];
         for (let i = 0; i < 6; i++) {
-          deleteDoc(doc(db, "audio_chunks", `${id}_chunk_${i}`)).catch(() => {});
+          delPromises.push(deleteDoc(doc(db, "audio_chunks", `${id}_chunk_${i}`)).catch(() => {}));
         }
+        await Promise.all(delPromises);
       } catch (e) {}
     }
 
-    // Bind Cloud Bridge Functions
     window.cloudBridge = {
-      saveMeme: (meme) => savePossiblyChunkedItem("memes", meme),
+      saveMeme: (m) => savePossiblyChunkedItem("memes", m),
       deleteMeme: (id) => deleteItemAndChunks("memes", id),
-      saveCharacter: async (charObj) => {
-        try {
-          await setDoc(doc(db, "characters", charObj.id), charObj);
-          updateCloudBadge('online', 'Cloud Sincronizzato');
-        } catch (e) {}
-      },
-      deleteCharacter: async (id) => {
-        try { await deleteDoc(doc(db, "characters", id)); } catch (e) {}
-      },
-      savePad: (pad) => savePossiblyChunkedItem("pads", pad),
+      saveCharacter: async (c) => { try { await setDoc(doc(db, "characters", c.id), c); } catch (e) {} },
+      deleteCharacter: async (id) => { try { await deleteDoc(doc(db, "characters", id)); } catch (e) {} },
+      savePad: (p) => savePossiblyChunkedItem("pads", p),
       deletePad: (id) => deleteItemAndChunks("pads", id),
-      saveCategories: async (cats) => {
-        try {
-          await setDoc(doc(db, "settings", "soundboard_config"), { categories: cats });
-        } catch (e) {}
-      }
+      saveCategories: async (cats) => { try { await setDoc(doc(db, "settings", "soundboard_config"), { categories: cats }); } catch (e) {} }
     };
 
-    // Real-Time Listeners
     let initialMemesSeeded = false;
     onSnapshot(collection(db, "memes"), async (snapshot) => {
-      state.cloudConnected = true;
-      updateCloudBadge('online', 'Cloud Sincronizzato');
-
-      if (snapshot.empty && !initialMemesSeeded) {
-        initialMemesSeeded = true;
-        for (const m of state.memes) {
-          window.cloudBridge.saveMeme(m);
-        }
-        return;
-      }
-
+      state.cloudConnected = true; updateCloudBadge('online', 'Cloud Sincronizzato');
+      if (snapshot.empty && !initialMemesSeeded) { initialMemesSeeded = true; for (const m of state.memes) window.cloudBridge.saveMeme(m); return; }
+      
       const loaded = [];
-      for (const d of snapshot.docs) {
-        const hydrated = await reassembleAudioChunksIfNeeded(d.data());
-        loaded.push(hydrated);
-      }
-      if (loaded.length > 0) {
-        state.memes = loaded;
-        saveLocalBackup();
-        refreshUI();
-        if (state.memottiTab === 'cerca') renderCercaPills();
-        if (state.memottiTab === 'personaggi') renderPersonaggi();
-      }
-    }, (err) => {
-      console.warn("Firestore memes listener warning:", err);
-      updateCloudBadge('offline', 'Locale (Attiva Firestore Rules)');
+      for (const d of snapshot.docs) loaded.push(await reassembleAudioChunksIfNeeded(d.data()));
+      if (loaded.length > 0) { state.memes = loaded; saveLocalBackup(); refreshUI(); if (state.memottiTab === 'cerca') renderCercaPills(); if (state.memottiTab === 'personaggi') renderPersonaggi(); }
     });
 
     let initialCharsSeeded = false;
     onSnapshot(collection(db, "characters"), (snapshot) => {
-      if (snapshot.empty && !initialCharsSeeded) {
-        initialCharsSeeded = true;
-        for (const c of state.characters) {
-          window.cloudBridge.saveCharacter(c);
-        }
-        return;
-      }
+      if (snapshot.empty && !initialCharsSeeded) { initialCharsSeeded = true; for (const c of state.characters) window.cloudBridge.saveCharacter(c); return; }
       const loaded = snapshot.docs.map(d => d.data());
-      if (loaded.length > 0) {
-        state.characters = loaded;
-        saveLocalBackup();
-        if (state.memottiTab === 'personaggi') renderPersonaggi();
-      }
+      if (loaded.length > 0) { state.characters = loaded; saveLocalBackup(); if (state.memottiTab === 'personaggi') renderPersonaggi(); }
     });
 
     let initialPadsSeeded = false;
     onSnapshot(collection(db, "pads"), async (snapshot) => {
-      if (snapshot.empty && !initialPadsSeeded) {
-        initialPadsSeeded = true;
-        for (const p of state.pads) {
-          window.cloudBridge.savePad(p);
-        }
-        return;
-      }
+      if (snapshot.empty && !initialPadsSeeded) { initialPadsSeeded = true; for (const p of state.pads) window.cloudBridge.savePad(p); return; }
       const loaded = [];
-      for (const d of snapshot.docs) {
-        const hydrated = await reassembleAudioChunksIfNeeded(d.data());
-        loaded.push(hydrated);
-      }
-      if (loaded.length > 0) {
-        state.pads = loaded.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        saveLocalBackup();
-        refreshUI();
-      }
+      for (const d of snapshot.docs) loaded.push(await reassembleAudioChunksIfNeeded(d.data()));
+      if (loaded.length > 0) { state.pads = loaded.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); saveLocalBackup(); refreshUI(); }
     });
 
     onSnapshot(doc(db, "settings", "soundboard_config"), (snap) => {
-      if (snap.exists() && Array.isArray(snap.data().categories)) {
-        state.categories = snap.data().categories;
-        renderSoundboardCategories();
-      }
+      if (snap.exists() && Array.isArray(snap.data().categories)) { state.categories = snap.data().categories; renderSoundboardCategories(); }
     });
   </script>
 </body>
