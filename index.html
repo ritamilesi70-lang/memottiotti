@@ -46,13 +46,11 @@
       overflow-x: hidden;
     }
 
-    /* Custom Scrollbars */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #070b14; }
     ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 9999px; }
     ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
 
-    /* Glowing Sound Pad Active Animation */
     @keyframes padPulseGlow {
       0%, 100% {
         box-shadow: 0 0 25px rgba(56, 189, 248, 0.75), inset 0 0 18px rgba(56, 189, 248, 0.35);
@@ -85,13 +83,11 @@
   <!-- ================= TOP HEADER ================= -->
   <header class="border-b border-slate-800/80 bg-[#0a0f1d]/95 backdrop-blur-md sticky top-0 z-40">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex flex-col md:flex-row items-center justify-between gap-3">
-      <!-- Title & Subtitle -->
       <div class="text-center md:text-left cursor-pointer group" onclick="navigate('menu')">
         <div class="flex items-center justify-center md:justify-start gap-2.5">
           <h1 class="text-2xl sm:text-3xl font-black tracking-tight bg-gradient-to-r from-amber-400 via-rose-400 to-cyan-400 bg-clip-text text-transparent">
             Memotti & Grasse Risate
           </h1>
-          <!-- Cloud Status Pill -->
           <button type="button" id="cloud-status-badge" onclick="event.stopPropagation(); showCloudInfoToast()" class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-900 border border-slate-700 text-slate-300 transition-all hover:border-cyan-500/50">
             <span id="cloud-status-dot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
             <span id="cloud-status-text">Connessione Cloud...</span>
@@ -102,7 +98,6 @@
         </p>
       </div>
 
-      <!-- Navigation Bar -->
       <nav class="flex items-center gap-1.5 bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 shadow-inner">
         <button id="nav-btn-menu" onclick="navigate('menu')" class="px-4 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-800 text-white shadow-sm border border-slate-700 flex items-center gap-1.5 transition-all">
           <i data-lucide="home" class="w-4 h-4"></i> Menu
@@ -120,9 +115,7 @@
   <!-- ================= MAIN CONTENT ================= -->
   <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 flex flex-col">
 
-    <!-- ========================================================
-         VIEW 1: MENU PRINCIPALE
-         ======================================================== -->
+    <!-- VIEW 1: MENU PRINCIPALE -->
     <section id="view-menu" class="view-section flex-1 flex flex-col justify-center items-center py-6 sm:py-12">
       <div class="text-center max-w-2xl mx-auto mb-10">
         <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 text-xs text-slate-300 mb-4 shadow">
@@ -137,9 +130,7 @@
         </p>
       </div>
 
-      <!-- Riquadri Principali: MEMOTTI & SOUNDBOARD -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-4xl">
-        <!-- Riquadro MEMOTTI -->
         <div onclick="navigate('memotti')" class="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-[#11192c] to-[#1a162b] border-2 border-slate-800 hover:border-amber-500/70 p-8 cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(245,158,11,0.18)]">
           <div class="flex items-center justify-between mb-6">
             <div class="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 group-hover:bg-amber-500 group-hover:text-slate-950 transition-all">
@@ -163,7 +154,6 @@
           </div>
         </div>
 
-        <!-- Riquadro SOUNDBOARD -->
         <div onclick="navigate('soundboard')" class="group relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-[#0e1c2e] to-[#0c2438] border-2 border-slate-800 hover:border-cyan-400/70 p-8 cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-[0_0_40px_rgba(56,189,248,0.2)]">
           <div class="flex items-center justify-between mb-6">
             <div class="p-4 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-400 group-hover:bg-cyan-400 group-hover:text-slate-950 transition-all">
@@ -189,11 +179,8 @@
       </div>
     </section>
 
-    <!-- ========================================================
-         VIEW 2: SEZIONE MEMOTTI
-         ======================================================== -->
+    <!-- VIEW 2: SEZIONE MEMOTTI -->
     <section id="view-memotti" class="view-section hidden flex-1 flex flex-col">
-      <!-- Sub-Navigation Bar -->
       <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4 mb-6">
         <div class="flex flex-wrap items-center gap-2">
           <button onclick="switchMemottiTab('raccolta')" id="memotti-tab-raccolta" class="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1.5 transition-all">
@@ -217,14 +204,12 @@
 
       <!-- SUB-TAB 1: RACCOLTA -->
       <div id="mem-pane-raccolta" class="mem-pane flex-1 flex flex-col">
-        <!-- Filter & Search Bar -->
         <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 mb-6 bg-slate-900/90 p-3.5 rounded-2xl border border-slate-800">
           <div class="relative flex-1">
             <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500"></i>
             <input type="text" id="meme-search-input" oninput="renderMemes()" placeholder="Cerca frase, situazione, luogo, personaggio o data..." class="w-full pl-10 pr-4 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-400">
           </div>
 
-          <!-- Category Quick Filter -->
           <div class="flex flex-wrap items-center gap-2">
             <select id="meme-category-select" onchange="renderMemes()" class="px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-slate-200 focus:outline-none focus:border-amber-400">
               <option value="ALL">Tutte le Categorie</option>
@@ -241,7 +226,6 @@
           </div>
         </div>
 
-        <!-- Grid of Memotti -->
         <div id="memes-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"></div>
 
         <div id="memes-empty" class="hidden flex-col items-center justify-center p-12 text-center text-slate-500 bg-slate-900/40 rounded-3xl border border-dashed border-slate-800">
@@ -268,9 +252,7 @@
           <p class="text-xs text-slate-400">Clicca su uno dei riquadri principali o seleziona direttamente una parola chiave per vedere tutti i memotti collegati.</p>
         </div>
 
-        <!-- 3 Riquadri Principali: Luogo, Personaggio, Data -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <!-- Box Luogo -->
           <div class="bg-slate-900 border-2 border-slate-800 hover:border-cyan-500/50 rounded-2xl p-4 transition-all">
             <div class="flex items-center justify-between mb-3">
               <h4 class="text-xs uppercase font-black text-cyan-400 tracking-wider flex items-center gap-2">
@@ -281,7 +263,6 @@
             <div id="pills-luoghi" class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1"></div>
           </div>
 
-          <!-- Box Personaggio -->
           <div class="bg-slate-900 border-2 border-slate-800 hover:border-emerald-500/50 rounded-2xl p-4 transition-all">
             <div class="flex items-center justify-between mb-3">
               <h4 class="text-xs uppercase font-black text-emerald-400 tracking-wider flex items-center gap-2">
@@ -292,7 +273,6 @@
             <div id="pills-personaggi" class="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1"></div>
           </div>
 
-          <!-- Box Data / Periodo -->
           <div class="bg-slate-900 border-2 border-slate-800 hover:border-amber-500/50 rounded-2xl p-4 transition-all">
             <div class="flex items-center justify-between mb-3">
               <h4 class="text-xs uppercase font-black text-amber-400 tracking-wider flex items-center gap-2">
@@ -304,7 +284,6 @@
           </div>
         </div>
 
-        <!-- Extra Box: Sezione Generica & Autori -->
         <div class="flex flex-wrap items-center gap-2 mb-6 bg-slate-900/60 p-3 rounded-2xl border border-slate-800/80">
           <span class="text-xs font-bold text-slate-400 mr-1">Altre categorie:</span>
           <button onclick="filterCercaBy('generica', 'Sezione Generica')" class="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-bold text-slate-200 border border-slate-700">
@@ -318,7 +297,6 @@
           </button>
         </div>
 
-        <!-- Risultati Filtro -->
         <div id="cerca-filtered-header" class="hidden items-center justify-between pb-3 border-b border-slate-800 mb-4">
           <div class="flex items-center gap-2">
             <span class="text-xs text-slate-400">Memotti filtrati per:</span>
@@ -347,13 +325,9 @@
       </div>
     </section>
 
-    <!-- ========================================================
-         VIEW 3: SEZIONE SOUNDBOARD CONSOLE
-         ======================================================== -->
+    <!-- VIEW 3: SEZIONE SOUNDBOARD CONSOLE -->
     <section id="view-soundboard" class="view-section hidden flex-1 flex flex-col">
-      <!-- Top Soundboard Master Console -->
       <div class="bg-slate-900/95 border border-slate-800 p-4 rounded-3xl mb-4 shadow-xl flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-        <!-- Primary Actions -->
         <div class="flex flex-wrap items-center gap-2.5">
           <button onclick="openCreateSoundModal()" class="px-5 py-3 bg-gradient-to-r from-cyan-400 to-blue-500 hover:from-cyan-300 hover:to-blue-400 text-slate-950 font-black text-xs sm:text-sm rounded-2xl flex items-center gap-2 shadow-lg shadow-cyan-500/25 active:scale-95 transition-all">
             <i data-lucide="plus-circle" class="w-4 h-4 stroke-[2.5]"></i> + CREA NUOVO SUONO
@@ -363,7 +337,6 @@
             <i data-lucide="square" class="w-4 h-4 fill-rose-400"></i> STOP TUTTO
           </button>
 
-          <!-- Overlap vs Exclusive Toggle -->
           <div class="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
             <button id="mode-poly" onclick="setPlaybackMode('overlap')" class="px-3 py-1.5 rounded-lg font-bold text-xs bg-cyan-500 text-slate-950 shadow">
               Sovrapponi
@@ -374,7 +347,6 @@
           </div>
         </div>
 
-        <!-- Search & Master Volume -->
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
           <div class="relative flex-1 sm:w-60">
             <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
@@ -389,7 +361,6 @@
         </div>
       </div>
 
-      <!-- Categories / Pages Bar -->
       <div class="flex items-center justify-between gap-2 mb-5 bg-slate-900/60 p-2.5 rounded-2xl border border-slate-800/80 overflow-x-auto">
         <div id="soundboard-category-tabs" class="flex items-center gap-1.5"></div>
 
@@ -406,15 +377,12 @@
         </div>
       </div>
 
-      <!-- Soundboard Pads Grid (Occupies Most of Viewport) -->
       <div id="soundboard-grid" class="flex-1 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 items-stretch auto-rows-min pb-10"></div>
     </section>
 
   </main>
 
-  <!-- ========================================================
-       MODAL 1: INSERISCI / MODIFICA MEMOTTO
-       ======================================================== -->
+  <!-- MODAL 1: INSERISCI / MODIFICA MEMOTTO -->
   <div id="modal-add-meme" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
     <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-xl w-full p-5 sm:p-6 shadow-2xl relative my-auto max-h-[94vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
@@ -429,13 +397,11 @@
       <form id="form-add-meme" onsubmit="handleSaveMeme(event)" class="space-y-4">
         <input type="hidden" id="meme-edit-id" value="">
 
-        <!-- Frase Iconica / Situazione -->
         <div>
           <label class="block text-xs font-bold text-slate-300 mb-1">Frase Iconica / Situazione / Meme *</label>
           <textarea id="meme-quote" required rows="3" placeholder="Scrivi qui la frase storica o descrivi la situazione..." class="w-full p-3 bg-slate-950 border border-slate-700 rounded-xl text-sm text-white focus:outline-none focus:border-amber-400 placeholder-slate-600"></textarea>
         </div>
 
-        <!-- Chi sta registrando il meme? (Andrea / Tommaso / Opzionale) -->
         <div>
           <label class="block text-xs font-bold text-slate-300 mb-1.5">Chi sta registrando il meme? (Opzionale)</label>
           <div class="grid grid-cols-3 gap-2.5">
@@ -454,7 +420,6 @@
           </div>
         </div>
 
-        <!-- Parole Chiave Opzionali (Luogo, Personaggio, Data) con Autocomplete -->
         <div>
           <div class="flex items-center justify-between mb-1">
             <label class="text-xs font-bold text-slate-300">Parole Chiave / Categorie (Opzionali)</label>
@@ -479,9 +444,8 @@
           </div>
         </div>
 
-        <!-- Allegato Foto (Inserisci, Sostituisci o Rimuovi anche dopo la creazione) -->
         <div class="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
-          <label class="block text-xs font-bold text-slate-300 mb-1.5">📷 Foto del Meme (Opzionale — anche post-registrazione)</label>
+          <label class="block text-xs font-bold text-slate-300 mb-1.5">📷 Foto del Meme (Opzionale)</label>
           <input type="file" id="meme-photo-input" accept="image/*" onchange="previewMemePhoto(this)" class="block w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-800 file:text-amber-400 cursor-pointer">
           <div id="meme-photo-preview-wrap" class="hidden mt-3 relative inline-block">
             <img id="meme-photo-preview" src="" alt="Anteprima foto" class="h-32 w-auto object-cover rounded-xl border border-slate-700">
@@ -491,7 +455,6 @@
           </div>
         </div>
 
-        <!-- Registrazione Vocale o File Audio / Video iPhone -->
         <div class="bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
           <label class="block text-xs font-bold text-slate-300 mb-2">🎙️ Audio / Nota Vocale (Opzionale)</label>
           <div class="flex flex-wrap items-center gap-2.5">
@@ -520,9 +483,7 @@
     </div>
   </div>
 
-  <!-- ========================================================
-       MODAL 2: GESTIONE PERSONAGGIO & FOTO
-       ======================================================== -->
+  <!-- MODAL 2: GESTIONE PERSONAGGIO & FOTO -->
   <div id="modal-personaggio" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-md w-full p-6 shadow-2xl relative">
       <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
@@ -543,7 +504,7 @@
         </div>
 
         <div class="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-          <label class="block text-xs font-bold text-slate-300 mb-2">📷 Foto del Personaggio (Inserisci o Sostituisci)</label>
+          <label class="block text-xs font-bold text-slate-300 mb-2">📷 Foto del Personaggio</label>
           <input type="file" id="char-photo-input" accept="image/*" onchange="previewCharPhoto(this)" class="block w-full text-xs text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-slate-800 file:text-emerald-400 cursor-pointer">
           <div id="char-photo-preview-wrap" class="hidden mt-3 flex items-center gap-3">
             <img id="char-photo-preview" src="" alt="Avatar personaggio" class="w-16 h-16 rounded-full object-cover border-2 border-emerald-400">
@@ -565,9 +526,7 @@
     </div>
   </div>
 
-  <!-- ========================================================
-       MODAL 3: PERSONALIZZA TASTO SOUNDBOARD
-       ======================================================== -->
+  <!-- MODAL 3: PERSONALIZZA TASTO SOUNDBOARD -->
   <div id="modal-pad-config" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-3 sm:p-4 overflow-y-auto">
     <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-5 sm:p-6 shadow-2xl relative my-auto max-h-[94vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
@@ -593,7 +552,6 @@
           </div>
         </div>
 
-        <!-- Colori Sfondo, Colore Testo e Dimensione Tasto -->
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
           <div>
             <label class="block text-[11px] font-bold text-slate-400 mb-1">Colore Sfondo</label>
@@ -613,19 +571,16 @@
           </div>
         </div>
 
-        <!-- Preset rapidi colori -->
         <div>
           <label class="block text-xs font-bold text-slate-400 mb-1.5">Temi Colore Rapidi</label>
           <div class="flex flex-wrap items-center gap-2" id="cfg-color-picker"></div>
         </div>
 
-        <!-- Scelta Icona -->
         <div>
           <label class="block text-xs font-bold text-slate-400 mb-1.5">Scegli Icona</label>
           <div class="flex flex-wrap gap-2" id="cfg-icon-picker"></div>
         </div>
 
-        <!-- Controlli Riproduzione Individuali -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
           <div>
             <label class="block text-xs font-bold text-slate-400 mb-1">Opzioni Riproduzione</label>
@@ -640,7 +595,6 @@
           </div>
         </div>
 
-        <!-- Pulsante APRI EDITOR AUDIO -->
         <div class="p-4 bg-gradient-to-r from-cyan-950/60 to-blue-950/60 border border-cyan-500/40 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3">
           <div>
             <span class="text-xs text-cyan-300 font-black uppercase tracking-wider block">Sorgente Audio Associata</span>
@@ -651,7 +605,6 @@
           </button>
         </div>
 
-        <!-- Azioni: Duplica, Sposta, Elimina, Salva -->
         <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
           <div class="flex items-center gap-1.5">
             <button type="button" onclick="moveCurrentPad(-1)" title="Sposta a sinistra" class="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs">
@@ -675,13 +628,10 @@
     </div>
   </div>
 
-  <!-- ========================================================
-       MODAL 4: EDITOR AUDIO & ESTRATTORE VIDEO CON WAVEFORM
-       ======================================================== -->
+  <!-- MODAL 4: EDITOR AUDIO & ESTRATTORE VIDEO CON WAVEFORM -->
   <div id="modal-audio-editor" class="fixed inset-0 z-50 bg-black/90 backdrop-blur-md hidden items-center justify-center p-2 sm:p-4 overflow-y-auto">
     <div class="bg-[#0b111e] border border-slate-700 rounded-3xl max-w-4xl w-full p-4 sm:p-6 shadow-2xl flex flex-col max-h-[96vh] overflow-y-auto my-auto">
 
-      <!-- Header Editor -->
       <div class="flex items-center justify-between border-b border-slate-800 pb-3 mb-4">
         <div>
           <h3 class="text-base sm:text-lg font-black text-white flex items-center gap-2">
@@ -694,7 +644,6 @@
         </button>
       </div>
 
-      <!-- Barra Importazione & Progress Bar -->
       <div class="mb-4 bg-slate-950 p-3.5 rounded-2xl border border-slate-800 flex flex-col gap-2.5">
         <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           <div class="flex flex-wrap items-center gap-3">
@@ -705,7 +654,6 @@
             <span id="editor-filename" class="text-xs text-slate-300 font-mono truncate max-w-xs">Nessun file caricato</span>
           </div>
 
-          <!-- Undo / Redo Buttons -->
           <div class="flex items-center gap-1.5">
             <button type="button" onclick="editorUndo()" id="btn-editor-undo" class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 text-xs font-semibold flex items-center gap-1" title="Annulla modifica">
               ↩️ Annulla
@@ -716,7 +664,6 @@
           </div>
         </div>
 
-        <!-- Barra di avanzamento estrazione/elaborazione -->
         <div id="editor-progress-wrap" class="hidden flex-col gap-1">
           <div class="flex justify-between text-[11px] text-cyan-400 font-semibold">
             <span id="editor-loading-text">Estrazione traccia audio in corso...</span>
@@ -728,9 +675,7 @@
         </div>
       </div>
 
-      <!-- Timeline & Waveform Visiva Interattiva -->
       <div class="bg-slate-950 rounded-2xl border border-slate-800 p-3 relative flex flex-col select-none">
-        <!-- Barra Temporale in Secondi -->
         <div id="waveform-ruler" class="w-full h-5 flex justify-between text-[10px] font-mono text-slate-400 border-b border-slate-800 pb-1 mb-2">
           <span>0.00s</span>
           <span id="ruler-q1">--</span>
@@ -739,20 +684,16 @@
           <span id="ruler-end">--</span>
         </div>
 
-        <!-- Scrollable Zoom Wrapper -->
         <div class="w-full overflow-x-auto rounded-xl border border-slate-900 bg-[#070b14]" id="waveform-scroll-area">
           <div class="relative h-36 sm:h-44 cursor-ew-resize" id="waveform-container" style="width: 100%;">
             <canvas id="waveform-canvas" class="w-full h-full block"></canvas>
 
-            <!-- Porzione Selezionata + 2 Cursori Trascinabili (IN / OUT) -->
             <div id="wave-selection-overlay" class="absolute top-0 bottom-0 bg-cyan-400/20 border-l-2 border-r-2 border-cyan-400 hidden">
-              <!-- Cursore Iniziale Trascinabile -->
               <div id="handle-start" class=" absolute -left-3 top-0 bottom-0 w-6 cursor-ew-resize flex flex-col items-center justify-between py-1 group">
                 <span class="px-1.5 py-0.5 bg-cyan-400 text-slate-950 font-black text-[9px] rounded shadow">IN</span>
                 <div class="w-1 flex-1 bg-cyan-400"></div>
                 <span class="w-3 h-3 rounded-full bg-cyan-400 border-2 border-slate-950"></span>
               </div>
-              <!-- Cursore Finale Trascinabile -->
               <div id="handle-end" class="absolute -right-3 top-0 bottom-0 w-6 cursor-ew-resize flex flex-col items-center justify-between py-1 group">
                 <span class="px-1.5 py-0.5 bg-amber-400 text-slate-950 font-black text-[9px] rounded shadow">OUT</span>
                 <div class="w-1 flex-1 bg-amber-400"></div>
@@ -768,7 +709,6 @@
         </div>
       </div>
 
-      <!-- Controlli Numerici Inizio / Fine & Zoom -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 my-3 bg-slate-950 p-3 rounded-2xl border border-slate-800">
         <div>
           <label class="block text-[10px] font-bold text-cyan-400 uppercase">Punto Iniziale (sec)</label>
@@ -788,7 +728,6 @@
         </div>
       </div>
 
-      <!-- Barra Ascolto & Anteprima -->
       <div class="flex flex-wrap items-center justify-between gap-2.5 p-3 bg-slate-900 rounded-2xl border border-slate-800">
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" onclick="playSelectionPreview()" class="px-4 py-2 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-950 font-black text-xs flex items-center gap-1.5 shadow-md shadow-cyan-400/20 active:scale-95">
@@ -808,7 +747,6 @@
         </label>
       </div>
 
-      <!-- Pannello Opzionale Effetti Audio -->
       <div class="mt-3 bg-slate-950 p-3.5 rounded-2xl border border-slate-800">
         <div class="flex items-center justify-between mb-2.5">
           <span class="text-xs font-black text-slate-200 flex items-center gap-1.5">
@@ -860,10 +798,9 @@
         </div>
       </div>
 
-      <!-- Pulsante SALVA AUDIO -->
       <div class="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-800 pt-4 mt-4">
         <span class="text-xs text-slate-400">
-          ✂️ Il salvataggio ritaglia fisicamente la porzione selezionata e la sincronizza sul Cloud.
+          ✂️ Il salvataggio comprime e sincronizza istantaneamente la porzione selezionata sul Cloud.
         </span>
         <button type="button" onclick="saveAudioCutToPad()" id="btn-save-audio-cut" class="w-full sm:w-auto px-8 py-3 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-slate-950 font-black rounded-xl text-xs sm:text-sm shadow-xl shadow-emerald-500/20 active:scale-95 transition-all">
           💾 SALVA AUDIO
@@ -872,9 +809,7 @@
     </div>
   </div>
 
-  <!-- ========================================================
-       MODAL 5: GESTIONE CATEGORIA SOUNDBOARD (AGGIUNGI / RINOMINA)
-       ======================================================== -->
+  <!-- MODAL 5: GESTIONE CATEGORIA SOUNDBOARD -->
   <div id="modal-category-mgr" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm hidden items-center justify-center p-4">
     <div class="bg-slate-900 border border-slate-700 rounded-3xl max-w-sm w-full p-6 shadow-2xl">
       <h3 id="modal-cat-title" class="text-base font-black text-white mb-3">Nuova Categoria Soundboard</h3>
@@ -896,7 +831,7 @@
   </div>
 
   <!-- ========================================================
-       SYNCHRONOUS CORE ENGINE & LOCAL DB CACHE
+       CORE ENGINE & FAST LOCAL INDEXED-DB CACHE
        ======================================================== -->
   <script>
     const PAD_COLORS = [
@@ -919,14 +854,11 @@
       memes: [], characters: [], pads: [], categories: [...DEFAULT_CATEGORIES]
     };
 
-    /* Cloud Bridge Hooks */
     window.cloudBridge = {
       saveMeme: async () => {}, deleteMeme: async () => {}, saveCharacter: async () => {},
       deleteCharacter: async () => {}, savePad: async () => {}, deletePad: async () => {}, saveCategories: async () => {}
     };
 
-    /* ================= LOCAL CACHE WITH INDEXED-DB ================= 
-       Risolve il problema dei Crash aggirando il limite di 5MB del LocalStorage */
     const localDB = new Promise((resolve, reject) => {
       const request = indexedDB.open('memotti_robust_cache', 1);
       request.onupgradeneeded = () => request.result.createObjectStore('data_cache');
@@ -939,7 +871,7 @@
         const db = await localDB;
         const raw = await new Promise(res => {
           const tx = db.transaction('data_cache', 'readonly');
-          const req = tx.objectStore('data_cache').get('memotti_v4_backup');
+          const req = tx.objectStore('data_cache').get('memotti_v5_backup');
           req.onsuccess = () => res(req.result);
           req.onerror = () => res(null);
         });
@@ -957,13 +889,12 @@
 
     async function saveLocalBackup() {
       try {
-        // Nessun limite di dimensione: salva tutto
         const payload = JSON.stringify({
           memes: state.memes, characters: state.characters, pads: state.pads, categories: state.categories
         });
         const db = await localDB;
         const tx = db.transaction('data_cache', 'readwrite');
-        tx.objectStore('data_cache').put(payload, 'memotti_v4_backup');
+        tx.objectStore('data_cache').put(payload, 'memotti_v5_backup');
       } catch (e) {}
     }
 
@@ -978,12 +909,12 @@
     }
 
     function showCloudInfoToast() {
-      if (state.cloudConnected) showToast("Cloud Firebase ('memotti') attivo e sincronizzato in tempo reale!");
-      else showToast("Modalità locale attiva. Assicurati che Firebase sia configurato.", true);
+      if (state.cloudConnected) showToast("Cloud Firestore attivo e sincronizzato!");
+      else showToast("Modalità locale attiva. Controlla le regole Firestore.", true);
     }
 
-    /* ================= IMAGE COMPRESSION ================= */
-    function compressImageFile(file, maxWidth = 900, quality = 0.72) {
+    /* ================= IMAGE & AUDIO COMPRESSION ================= */
+    function compressImageFile(file, maxWidth = 720, quality = 0.65) {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -1263,7 +1194,7 @@
     async function previewMemePhoto(input) {
       if (input.files && input.files[0]) {
         try {
-          currentMemePhotoDataUrl = await compressImageFile(input.files[0], 900, 0.72);
+          currentMemePhotoDataUrl = await compressImageFile(input.files[0], 720, 0.65);
           document.getElementById('meme-photo-preview').src = currentMemePhotoDataUrl;
           document.getElementById('meme-photo-preview-wrap')?.classList.remove('hidden');
         } catch (e) { showToast("Errore nel caricamento dell'immagine", true); }
@@ -1282,7 +1213,13 @@
         audioChunks = []; mediaRecorder = new MediaRecorder(stream);
         mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunks.push(e.data); };
         mediaRecorder.onstop = async () => {
-          currentMemeAudioDataUrl = await blobToDataURL(new Blob(audioChunks, { type: 'audio/webm' }));
+          const rawBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          try {
+            const audioBuf = await extractAudioBufferFromFile(rawBlob);
+            currentMemeAudioDataUrl = await blobToDataURL(audioBufferToWav8BitBlob(audioBuf, 11025));
+          } catch (e) {
+            currentMemeAudioDataUrl = await blobToDataURL(rawBlob);
+          }
           document.getElementById('meme-audio-preview').src = currentMemeAudioDataUrl; document.getElementById('meme-audio-preview-wrap')?.classList.remove('hidden');
           stream.getTracks().forEach(t => t.stop());
         };
@@ -1295,10 +1232,10 @@
 
     async function handleMemeAudioFile(input) {
       if (!input.files || !input.files[0]) return;
-      const file = input.files[0]; showToast("Elaborazione audio in corso...");
+      const file = input.files[0]; showToast("Compressione audio rapida...");
       try {
         const audioBuf = await extractAudioBufferFromFile(file);
-        currentMemeAudioDataUrl = await blobToDataURL(audioBufferToWavBlob(audioBuf, 16000));
+        currentMemeAudioDataUrl = await blobToDataURL(audioBufferToWav8BitBlob(audioBuf, 11025));
         document.getElementById('meme-audio-preview').src = currentMemeAudioDataUrl; document.getElementById('meme-audio-preview-wrap')?.classList.remove('hidden');
         showToast("Audio allegato con successo!");
       } catch (e) {
@@ -1332,7 +1269,7 @@
       saveLocalBackup(); closeModal('modal-add-meme'); refreshUI();
       if (state.memottiTab === 'random') showRandomMeme();
       if (state.memottiTab === 'cerca') renderCercaPills();
-      if (targetMeme) window.cloudBridge.saveMeme(targetMeme); // non attende l'upload così l'UI è istantanea
+      if (targetMeme) window.cloudBridge.saveMeme(targetMeme);
       showToast(editId ? "Memotto aggiornato!" : "Nuovo memotto salvato!");
     }
 
@@ -1364,7 +1301,7 @@
     }
     async function previewCharPhoto(input) {
       if (input.files && input.files[0]) {
-        currentCharPhotoDataUrl = await compressImageFile(input.files[0], 600, 0.75);
+        currentCharPhotoDataUrl = await compressImageFile(input.files[0], 500, 0.7);
         document.getElementById('char-photo-preview').src = currentCharPhotoDataUrl; document.getElementById('char-photo-preview-wrap')?.classList.remove('hidden');
       }
     }
@@ -1823,14 +1760,19 @@
       document.getElementById('fx-gain-val').textContent = '100%'; document.getElementById('fx-speed-val').textContent = '1.00x'; document.getElementById('fx-pitch-val').textContent = '0 st'; document.getElementById('fx-fadein-val').textContent = '0s'; document.getElementById('fx-fadeout-val').textContent = '0s';
       ['fx-echo', 'fx-reverse', 'fx-normalize'].forEach(id => document.getElementById(id).checked = false);
     }
+
+    /* COMPRESSIONE ULTRA-LEGGERA 8-BIT WAV PER SALVATAGGIO CLOUD LAMPO */
     async function saveAudioCutToPad() {
       if (!editorCurrentAudioBuffer || !editingPadId) { showToast("Carica prima un file audio o video!", true); return; }
       const pad = state.pads.find(p => p.id === editingPadId); if (!pad) return;
-      setEditorProgress(true, 'Rendering finale effetti e taglio...', 60);
+      setEditorProgress(true, 'Compressione e salvataggio rapido...', 60);
       try {
         const rawDur = Math.max(0.05, editorSelection.end - editorSelection.start), sliced = buildProcessedSliceBuffer(editorCurrentAudioBuffer, editorSelection.start, rawDur);
         const rate = getCombinedPlaybackRate(), hasEcho = document.getElementById('fx-echo').checked, outDur = (sliced.duration / rate) + (hasEcho ? 0.6 : 0);
-        const trgSr = outDur > 18 ? 16000 : 22050, offCtx = new OfflineAudioContext(1, Math.max(1, Math.ceil(outDur * trgSr)), trgSr);
+        
+        // 11025Hz o 8000Hz riduce drasticamente il peso mantenendo la voce nitida
+        const trgSr = outDur > 12 ? 8000 : 11025;
+        const offCtx = new OfflineAudioContext(1, Math.max(1, Math.ceil(outDur * trgSr)), trgSr);
         const source = offCtx.createBufferSource(); source.buffer = sliced; source.playbackRate.setValueAtTime(rate, 0);
         const gainNode = offCtx.createGain(), base = parseFloat(document.getElementById('fx-gain').value) || 1.0, fi = parseFloat(document.getElementById('fx-fadein').value) || 0, fo = parseFloat(document.getElementById('fx-fadeout').value) || 0, cDur = sliced.duration / rate;
         gainNode.gain.setValueAtTime(fi > 0 ? 0.001 : base, 0); if (fi > 0) gainNode.gain.linearRampToValueAtTime(base, Math.min(fi, cDur)); if (fo > 0) { gainNode.gain.setValueAtTime(base, Math.max(0, cDur - fo)); gainNode.gain.linearRampToValueAtTime(0.001, cDur); }
@@ -1839,22 +1781,32 @@
         gainNode.connect(offCtx.destination); source.start(0);
         const rendered = await offCtx.startRendering();
         
-        // Assegno il blob base64 provvisorio per l'UI immediata
-        pad.audioDataUrl = await blobToDataURL(audioBufferToWavBlob(rendered, trgSr)); 
+        pad.audioDataUrl = await blobToDataURL(audioBufferToWav8BitBlob(rendered, trgSr)); 
         pad.duration = Number(rendered.duration.toFixed(2)); pad.synthType = null; decodedPadBufferCache[pad.id] = rendered;
         
         stopEditorPreview(); setEditorProgress(false); closeModal('modal-audio-editor'); saveLocalBackup(); renderSoundboard(); 
         
-        // Eseguo il salvataggio sul cloud in background, senza bloccare la UI
-        window.cloudBridge.savePad(pad); 
-        showToast(`Audio salvato (${pad.duration}s)!`);
+        await window.cloudBridge.savePad(pad); 
+        showToast(`Audio salvato sul Cloud (${pad.duration}s)!`);
       } catch (err) { setEditorProgress(false); showToast("Errore salvataggio audio", true); }
     }
-    function audioBufferToWavBlob(buffer, sr) {
-      const data = buffer.getChannelData(0), rate = sr || buffer.sampleRate, size = data.length * 2, ab = new ArrayBuffer(44 + size), v = new DataView(ab);
+
+    // Genera un WAV 8-bit: dimezza il peso rispetto al 16-bit senza dipendere da Firebase Storage!
+    function audioBufferToWav8BitBlob(buffer, sr) {
+      const data = buffer.getChannelData(0), rate = sr || buffer.sampleRate, size = data.length, ab = new ArrayBuffer(44 + size), v = new DataView(ab);
       const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-      ws(0, 'RIFF'); v.setUint32(4, 36 + size, true); ws(8, 'WAVE'); ws(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); ws(36, 'data'); v.setUint32(40, size, true);
-      for (let i = 0, o = 44; i < data.length; i++, o += 2) { const s = Math.max(-1, Math.min(1, data[i])); v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7FFF, true); }
+      ws(0, 'RIFF'); v.setUint32(4, 36 + size, true); ws(8, 'WAVE'); ws(12, 'fmt '); v.setUint32(16, 16, true);
+      v.setUint16(20, 1, true); // PCM
+      v.setUint16(22, 1, true); // Mono
+      v.setUint32(24, rate, true);
+      v.setUint32(28, rate, true); // ByteRate (1 byte per sample)
+      v.setUint16(32, 1, true); // BlockAlign
+      v.setUint16(34, 8, true); // 8-bit
+      ws(36, 'data'); v.setUint32(40, size, true);
+      for (let i = 0, o = 44; i < data.length; i++, o++) {
+        const s = Math.max(-1, Math.min(1, data[i]));
+        v.setUint8(o, Math.round((s + 1) * 127.5));
+      }
       return new Blob([v], { type: 'audio/wav' });
     }
 
@@ -1881,12 +1833,11 @@
   </script>
 
   <!-- ========================================================
-       FIREBASE FIRESTORE & STORAGE REAL-TIME SYNC MODULE (FIX VELOCITÀ)
+       PURE FIRESTORE ULTRA-FAST SYNC (NO STORAGE REQUIRED)
        ======================================================== -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-    import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+    import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const firebaseConfig = {
       apiKey: "AIzaSyABnKY_-yqzz5r_SQXWKoetthHC5lgWFik",
@@ -1899,104 +1850,128 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
-    const storage = getStorage(app);
 
-    // TRUCCO DI VELOCITÀ: Convertiamo il pesante Base64 in un file binario puro (Blob) 
-    // usando la rete nativa del browser. Non blocca l'app ed è rapidissimo da caricare.
-    async function uploadToStorage(path, dataUrl) {
-      if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl; 
-      
-      const fileRef = ref(storage, path);
-      const response = await fetch(dataUrl);
-      const blob = await response.blob();
-      
-      await uploadBytes(fileRef, blob, { contentType: blob.type, cacheControl: 'public,max-age=31536000' });
-      
-      return await getDownloadURL(fileRef); 
+    // Con la compressione 8-bit, quasi tutti i suoni stanno sotto 700KB (0 chunk esterni = istantaneo!)
+    const CHUNK_SIZE = 700000;
+    const mediaCache = {};
+
+    async function saveFastFirestoreItem(colName, item) {
+      updateCloudBadge('syncing', 'Salvataggio...');
+      try {
+        const copy = { ...item };
+        const audioStr = copy.audioDataUrl || '';
+        if (audioStr) mediaCache[copy.id] = audioStr;
+
+        if (audioStr.length > CHUNK_SIZE) {
+          const totalChunks = Math.ceil(audioStr.length / CHUNK_SIZE);
+          const promises = [];
+          for (let i = 0; i < totalChunks; i++) {
+            const slice = audioStr.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
+            promises.push(setDoc(doc(db, "audio_chunks", `${copy.id}_chunk_${i}`), { parentId: copy.id, index: i, data: slice }));
+          }
+          await Promise.all(promises);
+          copy.audioDataUrl = '';
+          copy.audioChunkCount = totalChunks;
+        } else {
+          copy.audioChunkCount = 0;
+        }
+
+        await setDoc(doc(db, colName, copy.id), copy);
+        state.cloudConnected = true;
+        updateCloudBadge('online', 'Cloud Sincronizzato');
+      } catch (err) {
+        console.error(`Firestore save error (${colName}):`, err);
+        updateCloudBadge('offline', 'Errore Salvataggio Cloud');
+      }
+    }
+
+    async function hydrateItemFast(docData) {
+      if (docData.audioDataUrl) {
+        mediaCache[docData.id] = docData.audioDataUrl;
+        return docData;
+      }
+      if (mediaCache[docData.id]) {
+        return { ...docData, audioDataUrl: mediaCache[docData.id] };
+      }
+      if (!docData.audioChunkCount || docData.audioChunkCount <= 0) {
+        return docData;
+      }
+      try {
+        const promises = [];
+        for (let i = 0; i < docData.audioChunkCount; i++) {
+          promises.push(getDoc(doc(db, "audio_chunks", `${docData.id}_chunk_${i}`)));
+        }
+        const snaps = await Promise.all(promises);
+        let fullAudio = '';
+        snaps.forEach(s => { if (s.exists()) fullAudio += s.data().data || ''; });
+        if (fullAudio) mediaCache[docData.id] = fullAudio;
+        return { ...docData, audioDataUrl: fullAudio };
+      } catch (e) {
+        return docData;
+      }
+    }
+
+    async function deleteFastItem(colName, id) {
+      try {
+        delete mediaCache[id];
+        await deleteDoc(doc(db, colName, id));
+        for (let i = 0; i < 4; i++) {
+          deleteDoc(doc(db, "audio_chunks", `${id}_chunk_${i}`)).catch(() => {});
+        }
+      } catch (e) {}
     }
 
     window.cloudBridge = {
-      saveMeme: async (m) => {
-        updateCloudBadge('syncing', 'Salvataggio in corso...');
-        try {
-          const copy = { ...m };
-          // Eseguiamo gli upload di foto e audio in parallelo per dimezzare il tempo
-          const [photoUrl, audioUrl] = await Promise.all([
-             uploadToStorage(`memes/${copy.id}_img`, copy.photo),
-             uploadToStorage(`memes/${copy.id}_aud`, copy.audioDataUrl)
-          ]);
-          copy.photo = photoUrl;
-          copy.audioDataUrl = audioUrl;
-          
-          await setDoc(doc(db, "memes", copy.id), copy);
-          state.cloudConnected = true; updateCloudBadge('online', 'Cloud Sincronizzato');
-        } catch(e) { console.error(e); updateCloudBadge('offline', 'Errore Salvataggio'); }
-      },
-      deleteMeme: async (id) => {
-        try {
-          await deleteDoc(doc(db, "memes", id));
-          deleteObject(ref(storage, `memes/${id}_img`)).catch(() => {});
-          deleteObject(ref(storage, `memes/${id}_aud`)).catch(() => {});
-        } catch (e) {}
-      },
+      saveMeme: (m) => saveFastFirestoreItem("memes", m),
+      deleteMeme: (id) => deleteFastItem("memes", id),
       saveCharacter: async (c) => {
-        try {
-          const copy = { ...c };
-          copy.photo = await uploadToStorage(`chars/${copy.id}_img`, copy.photo);
-          await setDoc(doc(db, "characters", copy.id), copy);
-        } catch (e) {}
+        try { await setDoc(doc(db, "characters", c.id), c); updateCloudBadge('online', 'Cloud Sincronizzato'); } catch (e) {}
       },
       deleteCharacter: async (id) => {
-        try { 
-          await deleteDoc(doc(db, "characters", id)); 
-          deleteObject(ref(storage, `chars/${id}_img`)).catch(() => {}); 
-        } catch (e) {}
+        try { await deleteDoc(doc(db, "characters", id)); } catch (e) {}
       },
-      savePad: async (p) => {
-        updateCloudBadge('syncing', 'Salvataggio suono...');
-        try {
-          const copy = { ...p };
-          copy.audioDataUrl = await uploadToStorage(`pads/${copy.id}_aud`, copy.audioDataUrl);
-          
-          await setDoc(doc(db, "pads", copy.id), copy);
-          state.cloudConnected = true; updateCloudBadge('online', 'Cloud Sincronizzato');
-        } catch(e) { console.error(e); updateCloudBadge('offline', 'Errore Salvataggio'); }
-      },
-      deletePad: async (id) => {
-        try { 
-          await deleteDoc(doc(db, "pads", id)); 
-          deleteObject(ref(storage, `pads/${id}_aud`)).catch(() => {}); 
-        } catch (e) {}
-      },
-      saveCategories: async (cats) => { 
-        try { await setDoc(doc(db, "settings", "soundboard_config"), { categories: cats }); } catch (e) {} 
+      savePad: (p) => saveFastFirestoreItem("pads", p),
+      deletePad: (id) => deleteFastItem("pads", id),
+      saveCategories: async (cats) => {
+        try { await setDoc(doc(db, "settings", "soundboard_config"), { categories: cats }); } catch (e) {}
       }
     };
 
-    let initialMemesSeeded = false;
-    onSnapshot(collection(db, "memes"), (snapshot) => {
-      state.cloudConnected = true; updateCloudBadge('online', 'Cloud Sincronizzato');
-      if (snapshot.empty && !initialMemesSeeded) { initialMemesSeeded = true; for (const m of state.memes) window.cloudBridge.saveMeme(m); return; }
-      const loaded = snapshot.docs.map(d => d.data());
-      if (loaded.length > 0) { state.memes = loaded; saveLocalBackup(); refreshUI(); if (state.memottiTab === 'cerca') renderCercaPills(); if (state.memottiTab === 'personaggi') renderPersonaggi(); }
+    onSnapshot(collection(db, "memes"), async (snapshot) => {
+      state.cloudConnected = true;
+      updateCloudBadge('online', 'Cloud Sincronizzato');
+      if (snapshot.empty) return;
+      const loaded = await Promise.all(snapshot.docs.map(d => hydrateItemFast(d.data())));
+      state.memes = loaded;
+      saveLocalBackup();
+      refreshUI();
+      if (state.memottiTab === 'cerca') renderCercaPills();
+      if (state.memottiTab === 'personaggi') renderPersonaggi();
+    }, (err) => {
+      console.warn("Firestore listener error:", err);
+      updateCloudBadge('offline', 'Locale (Controlla Regole)');
     });
 
-    let initialCharsSeeded = false;
     onSnapshot(collection(db, "characters"), (snapshot) => {
-      if (snapshot.empty && !initialCharsSeeded) { initialCharsSeeded = true; for (const c of state.characters) window.cloudBridge.saveCharacter(c); return; }
-      const loaded = snapshot.docs.map(d => d.data());
-      if (loaded.length > 0) { state.characters = loaded; saveLocalBackup(); if (state.memottiTab === 'personaggi') renderPersonaggi(); }
+      if (snapshot.empty) return;
+      state.characters = snapshot.docs.map(d => d.data());
+      saveLocalBackup();
+      if (state.memottiTab === 'personaggi') renderPersonaggi();
     });
 
-    let initialPadsSeeded = false;
-    onSnapshot(collection(db, "pads"), (snapshot) => {
-      if (snapshot.empty && !initialPadsSeeded) { initialPadsSeeded = true; for (const p of state.pads) window.cloudBridge.savePad(p); return; }
-      const loaded = snapshot.docs.map(d => d.data());
-      if (loaded.length > 0) { state.pads = loaded.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)); saveLocalBackup(); refreshUI(); }
+    onSnapshot(collection(db, "pads"), async (snapshot) => {
+      if (snapshot.empty) return;
+      const loaded = await Promise.all(snapshot.docs.map(d => hydrateItemFast(d.data())));
+      state.pads = loaded.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+      saveLocalBackup();
+      refreshUI();
     });
 
     onSnapshot(doc(db, "settings", "soundboard_config"), (snap) => {
-      if (snap.exists() && Array.isArray(snap.data().categories)) { state.categories = snap.data().categories; renderSoundboardCategories(); }
+      if (snap.exists() && Array.isArray(snap.data().categories)) {
+        state.categories = snap.data().categories;
+        renderSoundboardCategories();
+      }
     });
   </script>
 </body>
